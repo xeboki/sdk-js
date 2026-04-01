@@ -64,16 +64,41 @@ The client exposes one sub-client per Xeboki product. Every method returns a typ
 
 ### `xeboki.pos` — Point of Sale
 
-Manage orders, products, inventory, customers, and sales reports.
+Build custom ordering apps, mobile storefronts, kiosk interfaces, and integrations on top of any subscriber's POS data.
+
+#### Catalog
+
+Browse the store's live product catalog and categories.
+
+```typescript
+// List active products
+const { data: products } = await xeboki.pos.listProducts({
+  locationId: 'loc_abc',
+  categoryId: 'cat_drinks',
+  isActive: true,
+  search: 'espresso',
+  limit: 100,
+});
+
+// Get a single product
+const product = await xeboki.pos.getProduct('prod_abc');
+console.log(product.name, product.price, product.modifierGroups);
+
+// List categories
+const { data: categories } = await xeboki.pos.listCategories({
+  locationId: 'loc_abc',
+  isActive: true,
+});
+```
 
 #### Orders
 
 ```typescript
-// List orders with optional filters
+// List orders
 const { data, total } = await xeboki.pos.listOrders({
   limit: 50,
   offset: 0,
-  status: 'completed',      // 'pending' | 'processing' | 'completed' | 'cancelled' | 'refunded'
+  status: 'pending',           // 'pending'|'confirmed'|'processing'|'ready'|'completed'|'cancelled'
   locationId: 'loc_abc',
   customerId: 'cust_xyz',
   startDate: '2026-01-01',
@@ -83,65 +108,219 @@ const { data, total } = await xeboki.pos.listOrders({
 // Get a single order
 const order = await xeboki.pos.getOrder('ord_abc123');
 
-// Create an order
-const newOrder = await xeboki.pos.createOrder({
-  locationId: 'loc_abc',
-  paymentMethod: 'cash',
-  items: [
-    { productId: 'prod_1', quantity: 2 },
-    { productId: 'prod_2', quantity: 1, modifiers: [{ modifierId: 'mod_oat' }] },
-  ],
-  customerId: 'cust_xyz',    // optional
-  discount: 5.00,            // optional — absolute amount
-  notes: 'No ice please',    // optional
+// Create an order — inventory is atomically reserved on create
+const newOrder = await xeboki.pos.createOrder(
+  {
+    locationId: 'loc_abc',
+    orderType: 'pickup',          // 'pickup' | 'delivery' | 'dine_in' | 'takeaway'
+    items: [
+      { productId: 'prod_1', quantity: 2 },
+      { productId: 'prod_2', quantity: 1, modifiers: [{ modifierId: 'mod_oat' }] },
+    ],
+    customerId: 'cust_xyz',       // optional
+    reference: 'web-order-991',   // optional — your external order ID (also acts as idempotency key)
+    notes: 'No ice please',
+    tableId: 'tbl_5',             // optional — for dine_in orders
+  },
+  { idempotencyKey: crypto.randomUUID() }  // optional — prevents duplicate orders on network retry
+);
+
+// Update order status (enforces valid transitions — invalid transitions return 409)
+await xeboki.pos.updateOrderStatus('ord_abc123', {
+  status: 'confirmed',   // pending→confirmed→processing→ready→completed
+  note: 'Confirmed by kitchen',
 });
+
+// Cancel an order (inventory is automatically restored)
+await xeboki.pos.updateOrderStatus('ord_abc123', { status: 'cancelled' });
+```
+
+**Order status machine**
+
+```
+pending → confirmed → processing → ready → completed
+any non-terminal status → cancelled
 ```
 
 **`Order` type**
 
-| Field           | Type                                                                 |
-|-----------------|----------------------------------------------------------------------|
-| `id`            | `string`                                                             |
-| `orderNumber`   | `string`                                                             |
-| `status`        | `'pending' \| 'processing' \| 'completed' \| 'cancelled' \| 'refunded'` |
-| `items`         | `OrderItem[]`                                                        |
-| `subtotal`      | `number`                                                             |
-| `tax`           | `number`                                                             |
-| `discount`      | `number`                                                             |
-| `total`         | `number`                                                             |
-| `locationId`    | `string`                                                             |
-| `employeeId`    | `string`                                                             |
-| `paymentMethod` | `string`                                                             |
-| `customerId`    | `string \| undefined`                                                |
-| `createdAt`     | `string` (ISO 8601)                                                  |
+| Field          | Type                                                                              |
+|----------------|-----------------------------------------------------------------------------------|
+| `id`           | `string`                                                                          |
+| `orderNumber`  | `string`                                                                          |
+| `status`       | `'pending'\|'confirmed'\|'processing'\|'ready'\|'completed'\|'cancelled'`         |
+| `orderType`    | `'pickup'\|'delivery'\|'dine_in'\|'takeaway'`                                     |
+| `items`        | `OrderItem[]`                                                                     |
+| `subtotal`     | `number`                                                                          |
+| `tax`          | `number`                                                                          |
+| `discount`     | `number`                                                                          |
+| `total`        | `number`                                                                          |
+| `paidTotal`    | `number`                                                                          |
+| `reference`    | `string \| undefined` — your external order ID                                    |
+| `locationId`   | `string`                                                                          |
+| `customerId`   | `string \| undefined`                                                             |
+| `createdAt`    | `string` (ISO 8601)                                                               |
 
-#### Products
+#### Payments
+
+The POS API **records** payments — it does not process card charges. Your app collects payment via Stripe, Square, or any other gateway, then records the result here.
 
 ```typescript
-// List products
-const { data: products } = await xeboki.pos.listProducts({
+// Record a single full payment
+const payment = await xeboki.pos.payOrder('ord_abc123', {
+  method: 'card',              // 'cash'|'card'|'gift_card'|'store_credit'|'online'|...
+  amount: 42.50,
+  reference: 'pi_stripe_abc',  // optional — your payment gateway transaction ID
+});
+
+// Split payment — add partial amounts one at a time
+const first = await xeboki.pos.addPayment('ord_abc123', {
+  method: 'cash',
+  amount: 20.00,
+});
+console.log(first.remainingAmount);  // how much is still owed
+
+const second = await xeboki.pos.addPayment('ord_abc123', {
+  method: 'card',
+  amount: 22.50,
+  reference: 'pi_stripe_xyz',
+});
+console.log(second.isFullyPaid);   // true — order auto-moves to 'completed'
+
+// List all payments recorded against an order
+const { data: payments } = await xeboki.pos.listPayments('ord_abc123');
+```
+
+**`AddPaymentResponse` fields**
+
+| Field             | Type      | Description                                       |
+|-------------------|-----------|---------------------------------------------------|
+| `payment`         | `Payment` | The payment just recorded                         |
+| `paidTotal`       | `number`  | Running total paid so far                         |
+| `remainingAmount` | `number`  | Amount still owed (`0` when fully paid)           |
+| `changeDue`       | `number`  | Change to return to customer (cash overpay only)  |
+| `isFullyPaid`     | `boolean` | `true` when the full order total has been paid    |
+| `orderStatus`     | `string`  | Updated order status after this payment           |
+
+#### Customers
+
+```typescript
+// Search / list customers
+const { data: customers } = await xeboki.pos.listCustomers({
+  search: 'jane',
+  limit: 20,
+});
+
+// Get a single customer (includes loyalty points, store credit)
+const customer = await xeboki.pos.getCustomer('cust_abc');
+
+// Create a customer
+const newCustomer = await xeboki.pos.createCustomer({
+  name: 'Jane Doe',
+  email: 'jane@example.com',
+  phone: '+1-555-0100',
+});
+```
+
+#### Appointments
+
+For service-based businesses — salons, gyms, repair shops, spas, etc.
+
+```typescript
+// List appointments
+const { data: appts } = await xeboki.pos.listAppointments({
   locationId: 'loc_abc',
-  categoryId: 'cat_drinks',
+  status: 'confirmed',         // 'pending'|'confirmed'|'in_progress'|'completed'|'cancelled'|'no_show'
+  date: '2026-04-15',
+  staffId: 'staff_xyz',
+});
+
+// Get a single appointment
+const appt = await xeboki.pos.getAppointment('appt_abc');
+
+// Book an appointment
+const newAppt = await xeboki.pos.createAppointment({
+  locationId: 'loc_abc',
+  customerId: 'cust_xyz',
+  serviceId: 'prod_haircut',   // maps to a product in the catalog
+  staffId: 'staff_xyz',
+  startTime: '2026-04-15T14:00:00Z',
+  durationMinutes: 60,
+  notes: 'Trim only',
+});
+
+// Update appointment status
+await xeboki.pos.updateAppointmentStatus('appt_abc', {
+  status: 'confirmed',
+});
+// When status → 'completed', a POS order is auto-created so revenue appears in sales reports
+```
+
+**Appointment status machine**
+
+```
+pending → confirmed → in_progress → completed
+pending | confirmed | in_progress → cancelled
+confirmed → no_show
+```
+
+#### Staff
+
+```typescript
+// List active staff members
+const { data: staff } = await xeboki.pos.listStaff({
+  locationId: 'loc_abc',
   isActive: true,
-  search: 'espresso',
-  limit: 100,
 });
 
-// Create a product
-const product = await xeboki.pos.createProduct({
-  name: 'Flat White',
-  price: 4.50,
+// Get a staff member
+const member = await xeboki.pos.getStaffMember('staff_abc');
+```
+
+#### Discounts
+
+```typescript
+// List active discount rules
+const { data: discounts } = await xeboki.pos.listDiscounts({
   locationId: 'loc_abc',
-  taxRate: 0.10,
-  trackInventory: true,
-  categoryId: 'cat_coffee',
+  isActive: true,
 });
 
-// Update a product
-const updated = await xeboki.pos.updateProduct('prod_abc', {
-  price: 4.75,
-  isActive: false,
+// Validate a discount code before applying it to an order
+const result = await xeboki.pos.validateDiscount({
+  code: 'SUMMER20',
+  orderTotal: 85.00,
+  locationId: 'loc_abc',
 });
+if (result.valid) {
+  console.log(`${result.type}: ${result.value}`);   // 'percent': 20 or 'fixed': 10
+  console.log(`Saves: $${result.discountAmount}`);
+} else {
+  console.log(result.reason);  // 'expired' | 'not_found' | 'minimum_not_met' | ...
+}
+```
+
+#### Tables
+
+```typescript
+// List tables (dine-in businesses)
+const { data: tables } = await xeboki.pos.listTables({
+  locationId: 'loc_abc',
+  status: 'available',         // 'available'|'occupied'|'reserved'|'cleaning'
+});
+
+// Update table status
+await xeboki.pos.updateTable('tbl_5', { status: 'occupied' });
+```
+
+#### Gift Cards
+
+```typescript
+// Look up a gift card by code
+const card = await xeboki.pos.getGiftCard('GC-XYZ-123');
+console.log(card.balance);    // current balance
+console.log(card.isActive);   // false if expired or fully redeemed
+console.log(card.expiresAt);  // ISO 8601, or null if no expiry
 ```
 
 #### Inventory
@@ -154,34 +333,76 @@ const { data: items } = await xeboki.pos.listInventory({
 });
 
 // Adjust inventory level
-const item = await xeboki.pos.updateInventory('inv_abc', {
+await xeboki.pos.updateInventory('inv_abc', {
   quantity: 50,
   reason: 'restock',
   notes: 'Weekly delivery',
 });
 ```
 
-#### Customers
+#### Webhooks
+
+Register an HTTPS endpoint to receive real-time POS events pushed to your server.
 
 ```typescript
-// Search customers
-const { data: customers } = await xeboki.pos.listCustomers({
-  search: 'jane',
-  limit: 20,
+// Register a webhook
+const webhook = await xeboki.pos.createWebhook({
+  url: 'https://yourserver.com/xeboki/events',
+  events: ['order.created', 'order.completed', 'order.cancelled'],
 });
+console.log(webhook.secret);  // whsec_... — shown ONCE, store it securely now
 
-// Create a customer
-const customer = await xeboki.pos.createCustomer({
-  name: 'Jane Doe',
-  email: 'jane@example.com',
-  phone: '+1-555-0100',
+// List registered webhooks (secret is masked — only a hint is returned)
+const { data: webhooks } = await xeboki.pos.listWebhooks();
+
+// Delete a webhook
+await xeboki.pos.deleteWebhook('wh_abc123');
+```
+
+**Available POS events**
+
+| Event                   | Fires when…                                                        |
+|-------------------------|--------------------------------------------------------------------|
+| `order.created`         | New order created via API                                          |
+| `order.updated`         | Order status changes                                               |
+| `order.completed`       | Order reaches `completed` state                                    |
+| `order.cancelled`       | Order cancelled — inventory is auto-restored                       |
+| `order.payment_added`   | Partial payment recorded on an order                               |
+| `order.paid`            | Order is fully paid                                                |
+| `appointment.created`   | New appointment booked                                             |
+| `appointment.updated`   | Appointment status changes                                         |
+| `appointment.completed` | Appointment completed — a POS order is auto-created               |
+| `appointment.cancelled` | Appointment cancelled                                              |
+| `inventory.low_stock`   | Product stock falls below configured threshold                     |
+
+**Verifying webhook signatures**
+
+Every webhook POST includes a `X-Xeboki-Signature: sha256=<hex>` header. Always verify it:
+
+```typescript
+import { createHmac, timingSafeEqual } from 'crypto';
+
+function verifyWebhook(secret: string, rawBody: string, signature: string): boolean {
+  const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex');
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+}
+
+// Express.js example — use raw body parser
+app.post('/xeboki/events', express.raw({ type: 'application/json' }), (req, res) => {
+  const sig = req.headers['x-xeboki-signature'] as string;
+  if (!verifyWebhook(process.env.WEBHOOK_SECRET!, req.body.toString(), sig)) {
+    return res.status(401).send('Bad signature');
+  }
+  const { event, data } = JSON.parse(req.body.toString());
+  // handle event...
+  res.sendStatus(200);
 });
 ```
 
 #### Reporting
 
 ```typescript
-// Sales report
+// Sales summary
 const report = await xeboki.pos.getSalesReport({
   startDate: '2026-03-01',
   endDate: '2026-03-31',
