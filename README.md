@@ -37,7 +37,7 @@ console.log(xeboki.lastRateLimit?.remaining);
 
 ## Authentication
 
-All requests are authenticated with an API key. You can generate keys from your [Xeboki developer dashboard](https://developers.xeboki.com/dashboard).
+All requests are authenticated with an API key. You can generate keys from your [Xeboki account dashboard](https://account.xeboki.com).
 
 | Key prefix      | Environment |
 |-----------------|-------------|
