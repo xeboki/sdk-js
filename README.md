@@ -1,6 +1,10 @@
-# @xeboki/sdk
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xeboki/ordering-app/main/assets/images/xe_logo.svg" alt="Xeboki" width="120" />
+</p>
 
-Official JavaScript and TypeScript SDK for the [Xeboki developer API](https://developers.xeboki.com). Works in Node.js, React Native, and any modern browser environment.
+<h1 align="center">Xeboki SDK for JavaScript & TypeScript</h1>
+
+<p align="center">Official JavaScript and TypeScript SDK for the <a href="https://developers.xeboki.com">Xeboki developer API</a>. Works in Node.js, React Native, and any modern browser environment.</p>
 
 [![npm version](https://img.shields.io/npm/v/@xeboki/sdk)](https://www.npmjs.com/package/@xeboki/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
