@@ -637,6 +637,126 @@ const { data: subscribers } = await xeboki.launchpad.listSubscribers('app_abc', 
 
 ---
 
+### `xeboki.ordering` — Customer Ordering
+
+Build custom ordering apps, kiosks, and mobile storefronts on top of any
+subscriber's POS catalog. Includes customer auth, real-time order tracking,
+appointments, and more.
+
+```typescript
+// Validate API key on startup
+const { valid, subPlan } = await xeboki.ordering.validateApiKey();
+
+// Browse catalog
+const { data: products } = await xeboki.ordering.listProducts({ limit: 20 });
+const { data: categories } = await xeboki.ordering.listCategories();
+
+// Customer login / registration
+const { token } = await xeboki.ordering.loginCustomer({ email: '...', password: '...' });
+await xeboki.ordering.registerCustomer({ email: '...', password: '...', fullName: 'Jane Doe' });
+
+// Place an order
+const order = await xeboki.ordering.createOrder({
+  orderType: 'pickup',
+  items: [{ productId: 'prod_abc', quantity: 2 }],
+  customerId: 'cust_xyz',
+});
+
+// Pay an order
+const paid = await xeboki.ordering.payOrder(order.id, { method: 'card', amount: order.total });
+
+// Real-time tracking via Firestore (recommended — see Firestore-direct section below)
+const fbConfig = await xeboki.ordering.getFirebaseConfig();
+```
+
+---
+
+### `xeboki.developer` — API Keys & Webhooks
+
+Manage API keys and webhook endpoints programmatically.
+Requires a POS JWT issued to an admin-role user.
+
+```typescript
+// ── API Keys ─────────────────────────────────────────────────────────────────
+
+// List all keys
+const keys = await xeboki.developer.listApiKeys();
+
+// Create a key — full key shown ONCE, store it securely
+const { key, keyPrefix } = await xeboki.developer.createApiKey({
+  name:   'Mobile Storefront',
+  scopes: ['pos:read', 'orders:write', 'customers:read'],
+});
+console.log(`Save this key now: ${key}`);   // xbk_live_...
+
+// Revoke a key
+await xeboki.developer.revokeApiKey(keyId);
+
+// ── Webhooks ──────────────────────────────────────────────────────────────────
+
+// Register an endpoint
+const hook = await xeboki.developer.registerWebhook({
+  url:    'https://yourserver.com/webhooks/xeboki',
+  events: ['order.created', 'order.status_changed'],
+});
+
+// Send a test event
+await xeboki.developer.testWebhook(hook.id, { event: 'order.created' });
+
+// Delete an endpoint
+await xeboki.developer.deleteWebhook(hook.id);
+
+// Discover available scopes and events
+const scopes = await xeboki.developer.listScopes();
+const events = await xeboki.developer.listEvents();
+```
+
+**Verifying webhook signatures (Node.js)**
+
+```typescript
+import { createHmac } from 'crypto';
+
+function verifyWebhook(secret: string, rawBody: string, header: string): boolean {
+  const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex');
+  return expected === header;   // header = req.headers['x-xeboki-signature']
+}
+```
+
+---
+
+### Firestore-direct path (ordering apps)
+
+The official Xeboki Ordering App reads catalog, orders, and customers directly
+from the subscriber's Firestore for sub-100ms latency.
+
+```typescript
+// Step 1 — fetch Firebase config + custom auth token
+const fbConfig = await xeboki.ordering.getFirebaseConfig();
+
+// Step 2 — initialise a secondary Firebase app (browser/React Native)
+const secondaryApp = initializeApp(
+  {
+    apiKey:            fbConfig.apiKey,
+    authDomain:        fbConfig.authDomain,
+    projectId:         fbConfig.projectId,
+    storageBucket:     fbConfig.storageBucket,
+    messagingSenderId: fbConfig.messagingSenderId,
+    appId:             fbConfig.appId,
+  },
+  'ordering_pro',
+);
+
+// Step 3 — sign in with the custom token
+await signInWithCustomToken(getAuth(secondaryApp), fbConfig.customToken!);
+
+// Step 4 — real-time order tracking
+onSnapshot(doc(getFirestore(secondaryApp), 'orders', orderId), (snap) => {
+  console.log('Status:', snap.get('status'));
+});
+```
+
+---
+
 ## Error Handling
 
 All SDK methods throw `XebokiError` on non-2xx responses. Always wrap calls in `try/catch`.

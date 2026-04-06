@@ -7,6 +7,8 @@ import { RemoveBGClient } from './products/removebg.js';
 import { AnalyticsClient } from './products/analytics.js';
 import { AccountClient } from './products/account.js';
 import { LaunchpadClient } from './products/launchpad.js';
+import { OrderingClient } from './products/ordering.js';
+import { DeveloperClient } from './products/developer.js';
 
 export interface XebokiClientOptions {
   apiKey: string;
@@ -22,6 +24,8 @@ export class XebokiClient {
   readonly analytics: AnalyticsClient;
   readonly account: AccountClient;
   readonly launchpad: LaunchpadClient;
+  readonly ordering: OrderingClient;
+  readonly developer: DeveloperClient;
 
   private _lastRateLimit: RateLimitInfo | null = null;
 
@@ -51,5 +55,7 @@ export class XebokiClient {
     this.analytics = new AnalyticsClient(http, onRateLimit);
     this.account = new AccountClient(http, onRateLimit);
     this.launchpad = new LaunchpadClient(http, onRateLimit);
+    this.ordering = new OrderingClient(http, onRateLimit);
+    this.developer = new DeveloperClient(http, onRateLimit);
   }
 }

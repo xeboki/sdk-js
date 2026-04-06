@@ -11,6 +11,8 @@ export { RemoveBGClient } from './products/removebg.js';
 export { AnalyticsClient } from './products/analytics.js';
 export { AccountClient } from './products/account.js';
 export { LaunchpadClient } from './products/launchpad.js';
+export { OrderingClient } from './products/ordering.js';
+export { DeveloperClient } from './products/developer.js';
 
 // POS types
 export type {
@@ -96,3 +98,45 @@ export type {
   ListLaunchpadCustomersParams,
   ListSubscriptionsParams,
 } from './products/launchpad.js';
+
+// Ordering types
+export type {
+  OrderingCategory,
+  ModifierOption,
+  ModifierGroup,
+  ProductVariant,
+  VariantOption,
+  OrderingProduct,
+  OrderingCustomer,
+  CustomerAuth,
+  OrderingLineItem,
+  OrderingOrder,
+  DiscountValidation,
+  OrderingAppointment,
+  OrderingTable,
+  OrderingStaff,
+  OrderingListResponse,
+  KeyValidationResult,
+  OrderingFirebaseConfig,
+  CreateOrderItem,
+  CreateOrderingOrderParams,
+  CreateAppointmentParams,
+  StoreConfig,
+  StorefrontConfig,
+  UpdateStorefrontConfigParams,
+  StripePaymentIntent,
+  GiftCard,
+  CustomerAddress,
+  AddressParams,
+  UpdateCustomerParams,
+} from './products/ordering.js';
+
+// Developer types
+export type {
+  ApiKey,
+  CreatedApiKey,
+  Webhook,
+  CreateApiKeyParams,
+  RegisterWebhookParams,
+  TestWebhookParams,
+} from './products/developer.js';
