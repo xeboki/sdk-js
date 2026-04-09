@@ -13,6 +13,7 @@ export { AccountClient } from './products/account.js';
 export { LaunchpadClient } from './products/launchpad.js';
 export { OrderingClient } from './products/ordering.js';
 export { DeveloperClient } from './products/developer.js';
+export { CodeClient } from './products/xecode.js';
 
 // POS types
 export type {
@@ -130,6 +131,19 @@ export type {
   AddressParams,
   UpdateCustomerParams,
 } from './products/ordering.js';
+
+// Code types
+export type {
+  GenerateQRParams,
+  QRResult,
+  GenerateBarcodeParams,
+  BarcodeResult,
+  BatchQRParams,
+  BatchQRItem,
+  BatchQRResult,
+  CodeUsage,
+  QRType,
+} from './products/xecode.js';
 
 // Developer types
 export type {

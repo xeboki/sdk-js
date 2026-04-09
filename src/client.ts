@@ -9,6 +9,7 @@ import { AccountClient } from './products/account.js';
 import { LaunchpadClient } from './products/launchpad.js';
 import { OrderingClient } from './products/ordering.js';
 import { DeveloperClient } from './products/developer.js';
+import { CodeClient } from './products/xecode.js';
 
 export interface XebokiClientOptions {
   apiKey: string;
@@ -26,6 +27,7 @@ export class XebokiClient {
   readonly launchpad: LaunchpadClient;
   readonly ordering: OrderingClient;
   readonly developer: DeveloperClient;
+  readonly code: CodeClient;
 
   private _lastRateLimit: RateLimitInfo | null = null;
 
@@ -57,5 +59,6 @@ export class XebokiClient {
     this.launchpad = new LaunchpadClient(http, onRateLimit);
     this.ordering = new OrderingClient(http, onRateLimit);
     this.developer = new DeveloperClient(http, onRateLimit);
+    this.code = new CodeClient(http, onRateLimit);
   }
 }
