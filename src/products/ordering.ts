@@ -403,13 +403,78 @@ export interface UpdateCustomerParams {
   notes?: string;
 }
 
+
+/** A scheduled group class customers can book a place in. */
+export interface OrderingClassSession {
+  id: string;
+  locationId: string;
+  serviceId: string;
+  serviceName: string;
+  description?: string;
+  staffId?: string;
+  staffName?: string;
+  /** ISO date, e.g. "2026-08-10". */
+  sessionDate: string;
+  /** "HH:mm". */
+  startTime: string;
+  endTime: string;
+  capacity: number;
+  bookedCount: number;
+  /** Never negative, even if a counter has drifted. */
+  placesLeft: number;
+  price: number;
+  status: string;
+  /** False for a sold-out or cancelled class — do not offer a Book button. */
+  isBookable: boolean;
+}
+
+export interface BookClassParams {
+  /** Omit for a guest booking. Two guests are two people, not one. */
+  customerId?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  notes?: string;
+  /** External booking id. Passing it twice returns the first booking. */
+  reference?: string;
+}
+
+export interface ClassBookingResult {
+  appointmentId: string;
+  classSessionId: string;
+  status: string;
+  serviceName: string;
+  price: number;
+  sessionDate: string;
+  startTime: string;
+  endTime: string;
+  placesLeft: number;
+  /** True when a retry matched an earlier booking rather than making one. */
+  idempotent?: boolean;
+}
+
 export interface CreateAppointmentParams {
   customerId: string;
   serviceId: string;
   staffId?: string;
+  /** ISO-8601 datetime the appointment starts, e.g. "2026-04-15T10:00:00Z". */
   startTime: string;
   durationMinutes?: number;
   notes?: string;
+  /**
+   * Which location the booking belongs to.
+   *
+   * Optional: a key scoped to exactly one location has already answered this,
+   * which is the case for a storefront. Required only when the key permits
+   * several, since an appointment stored against no location is invisible to
+   * every screen in the till — they all query by location first.
+   */
+  locationId?: string;
+  /** External booking id. Passing it twice returns the first booking. */
+  reference?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
 }
 
 // ─── Client ───────────────────────────────────────────────────────────────────
@@ -745,6 +810,89 @@ export class OrderingClient {
     );
   }
 
+  // ── Group classes ───────────────────────────────────────────────────────────
+
+  /**
+   * Bookable group classes, soonest first.
+   *
+   * Past and cancelled sessions are never returned. Full ones are excluded
+   * unless `includeFull` is set, which is how a storefront shows a class as
+   * sold out rather than pretending it does not exist.
+   */
+  async listClasses(
+    opts: { locationId?: string; limit?: number; includeFull?: boolean } = {},
+  ): Promise<OrderingListResponse<OrderingClassSession>> {
+    const raw = await this.call<{ classes?: Record<string, unknown>[]; count?: number }>({
+      method: 'GET',
+      path: '/v1/pos/classes',
+      query: {
+        location_id: opts.locationId,
+        limit: opts.limit,
+        ...(opts.includeFull !== undefined && { include_full: opts.includeFull }),
+      },
+    });
+    const data = (raw.classes ?? []).map((c) => ({
+      id: c['id'] as string,
+      locationId: c['location_id'] as string,
+      serviceId: c['service_id'] as string,
+      serviceName: c['service_name'] as string,
+      description: c['description'] as string | undefined,
+      staffId: c['staff_id'] as string | undefined,
+      staffName: c['staff_name'] as string | undefined,
+      sessionDate: c['session_date'] as string,
+      startTime: c['start_time'] as string,
+      endTime: c['end_time'] as string,
+      capacity: c['capacity'] as number,
+      bookedCount: c['booked_count'] as number,
+      placesLeft: c['places_left'] as number,
+      price: c['price'] as number,
+      status: c['status'] as string,
+      isBookable: c['is_bookable'] as boolean,
+    }));
+    return {
+      data,
+      total: raw.count ?? data.length,
+      limit: opts.limit ?? 50,
+      offset: 0,
+    };
+  }
+
+  /**
+   * Claims one place in a class.
+   *
+   * The place is claimed atomically server-side, so two customers clicking
+   * Book on the last one cannot both succeed — the loser gets a 409 rather
+   * than a place that does not exist. A customer already in the class gets a
+   * 409 too; a duplicate would take a seat from somebody else and bill them
+   * twice.
+   */
+  async bookClass(sessionId: string, params: BookClassParams = {}): Promise<ClassBookingResult> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'POST',
+      path: `/v1/pos/classes/${sessionId}/book`,
+      body: {
+        ...(params.customerId !== undefined && { customer_id: params.customerId }),
+        ...(params.customerName !== undefined && { customer_name: params.customerName }),
+        ...(params.customerEmail !== undefined && { customer_email: params.customerEmail }),
+        ...(params.customerPhone !== undefined && { customer_phone: params.customerPhone }),
+        ...(params.notes !== undefined && { notes: params.notes }),
+        ...(params.reference !== undefined && { reference: params.reference }),
+      },
+    });
+    return {
+      appointmentId: raw['appointment_id'] as string,
+      classSessionId: raw['class_session_id'] as string,
+      status: raw['status'] as string,
+      serviceName: raw['service_name'] as string,
+      price: (raw['price'] as number) ?? 0,
+      sessionDate: raw['session_date'] as string,
+      startTime: raw['start_time'] as string,
+      endTime: raw['end_time'] as string,
+      placesLeft: (raw['places_left'] as number) ?? 0,
+      ...(raw['idempotent'] !== undefined && { idempotent: raw['idempotent'] as boolean }),
+    };
+  }
+
   async createAppointment(params: CreateAppointmentParams): Promise<OrderingAppointment> {
     const raw = await this.call<{ appointment?: OrderingAppointment } | OrderingAppointment>({
       method: 'POST',
@@ -752,10 +900,19 @@ export class OrderingClient {
       body: {
         customer_id: params.customerId,
         service_id: params.serviceId,
-        start_time: params.startTime,
+        // `scheduled_at`, not `start_time`. The endpoint has always taken
+        // scheduled_at and never had a start_time field, so every call this
+        // method made was rejected at validation — online booking did not
+        // half-work, it had never worked.
+        scheduled_at: params.startTime,
         duration_minutes: params.durationMinutes ?? 60,
+        ...(params.locationId !== undefined && { location_id: params.locationId }),
         ...(params.staffId !== undefined && { staff_id: params.staffId }),
         ...(params.notes !== undefined && { notes: params.notes }),
+        ...(params.reference !== undefined && { reference: params.reference }),
+        ...(params.customerName !== undefined && { customer_name: params.customerName }),
+        ...(params.customerEmail !== undefined && { customer_email: params.customerEmail }),
+        ...(params.customerPhone !== undefined && { customer_phone: params.customerPhone }),
       },
     });
     return ('appointment' in raw && raw.appointment) ? raw.appointment : raw as OrderingAppointment;
