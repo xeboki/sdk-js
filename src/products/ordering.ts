@@ -594,6 +594,21 @@ export class OrderingClient {
     return res.data;
   }
 
+  /**
+   * Transport-only passthrough — returns the gateway response UNMAPPED. For a
+   * BFF that forwards verbatim to its own clients (so a mobile app keeps its
+   * existing gateway-shaped parsers). The caller supplies the full, correct
+   * path (e.g. '/v1/pos/catalog'); auth, first-party headers and identity
+   * encoding are still applied by the HTTP layer.
+   */
+  async raw<T = unknown>(
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+    path: string,
+    opts: { query?: Record<string, string | number | boolean | undefined>; body?: unknown } = {},
+  ): Promise<T> {
+    return this.call<T>({ method, path, query: opts.query, body: opts.body });
+  }
+
   private async callList<T>(
     opts: Parameters<HttpClient['request']>[0],
     key: string,
