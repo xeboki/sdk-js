@@ -1400,6 +1400,20 @@ export class OrderingClient {
     }
   }
 
+  /**
+   * Recommended add-on products for the given cart/product ids. Powers the
+   * "you might also like" block on a product or cart page.
+   */
+  async listUpsells(productIds: string[]): Promise<OrderingProduct[]> {
+    if (productIds.length === 0) return [];
+    const raw = await this.call<{ products?: Array<Record<string, unknown>> }>({
+      method: 'GET',
+      path: '/v1/pos/catalog/upsells',
+      query: { product_ids: productIds.join(',') },
+    });
+    return (raw.products ?? []).map((p) => this._mapProduct(p));
+  }
+
   // ── Customer profile update ───────────────────────────────────────────────
 
   async updateCustomer(customerId: string, params: UpdateCustomerParams): Promise<OrderingCustomer> {
