@@ -102,10 +102,13 @@ export interface OrderingOrder {
   subtotal: number;
   tax: number;
   discount: number;
+  shipping: number;
   total: number;
   paidTotal: number;
   items: OrderingLineItem[];
   customerId: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
   tableId: string | null;
   notes: string | null;
   reference: string | null;
@@ -220,6 +223,8 @@ export interface CreateOrderingOrderParams {
   discountCode?: string;
   /** Gift card spent against the finished total. */
   giftCardCode?: string;
+  /** Delivery/shipping charged on top of the goods. */
+  shippingAmount?: number;
 }
 
 export interface StoreConfig {
@@ -278,6 +283,16 @@ export interface StorefrontConfig {
   footerColumns: FooterColumn[];
   socialLinks: Record<string, string>;
   customDomain: string | null;
+  /** Whether the merchant charges for delivery (else pickup/free only). */
+  shippingEnabled: boolean;
+  /** Flat delivery fee applied to delivery orders. */
+  shippingFlatRate: number;
+  /** Order subtotal at/above which delivery is free; null = never. */
+  freeShippingThreshold: number | null;
+  /** GA4 Measurement ID (G-XXXX) for this store, if set. */
+  ga4MeasurementId: string | null;
+  /** Meta (Facebook) Pixel ID for this store, if set. */
+  metaPixelId: string | null;
   updatedAt: string | null;
 }
 
@@ -883,6 +898,7 @@ export class OrderingClient {
         }),
         ...(params.discountCode !== undefined && { discount_code: params.discountCode }),
         ...(params.giftCardCode !== undefined && { gift_card_code: params.giftCardCode }),
+        ...(params.shippingAmount !== undefined && { shipping_amount: params.shippingAmount }),
       },
     });
     // The create response is snake_case and nests nothing: order_id, not id.
@@ -906,6 +922,7 @@ export class OrderingClient {
       subtotal:        num(raw['subtotal']),
       tax:             num(raw['tax']),
       discount:        num(raw['discount'] ?? raw['discounts']),
+      shipping:        num(raw['shipping']),
       total:           num(raw['total']),
       paidTotal:       num(raw['paid_total'] ?? raw['paidTotal']),
       items:           ((raw['items'] as Array<Record<string, unknown>> | undefined) ?? []).map((it) => {
@@ -926,6 +943,8 @@ export class OrderingClient {
         };
       }),
       customerId:      (raw['customer_id'] as string | null) ?? null,
+      customerName:    (raw['customer_name'] as string | null) ?? (raw['guest_name'] as string | null) ?? null,
+      customerEmail:   (raw['customer_email'] as string | null) ?? (raw['guest_email'] as string | null) ?? null,
       tableId:         (raw['table_number'] as string | null) ?? (raw['table_id'] as string | null) ?? null,
       notes:           (raw['notes'] as string | null) ?? null,
       reference:       (raw['external_reference'] as string | null) ?? (raw['reference'] as string | null) ?? null,
@@ -1180,6 +1199,11 @@ export class OrderingClient {
       footerColumns:           (raw['footer_columns'] as FooterColumn[]) ?? [],
       socialLinks:             (raw['social_links'] as Record<string, string>) ?? {},
       customDomain:            (raw['custom_domain'] as string | null) ?? null,
+      shippingEnabled:         (raw['shipping_enabled'] as boolean) ?? false,
+      shippingFlatRate:        (raw['shipping_flat_rate'] as number) ?? 0,
+      freeShippingThreshold:   (raw['free_shipping_threshold'] as number | null) ?? null,
+      ga4MeasurementId:        (raw['ga4_measurement_id'] as string | null) ?? null,
+      metaPixelId:             (raw['meta_pixel_id'] as string | null) ?? null,
       updatedAt:               (raw['updated_at'] as string | null) ?? null,
     };
   }
