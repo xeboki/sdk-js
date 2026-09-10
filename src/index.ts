@@ -123,6 +123,7 @@ export type {
   BookClassParams,
   ClassBookingResult,
   OrderingTable,
+  LoyaltyConfig,
   OrderingStaff,
   OrderingListResponse,
   OrderingLocation,

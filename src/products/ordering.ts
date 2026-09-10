@@ -103,6 +103,7 @@ export interface OrderingOrder {
   tax: number;
   discount: number;
   shipping: number;
+  loyaltyDiscount: number;
   total: number;
   paidTotal: number;
   items: OrderingLineItem[];
@@ -137,6 +138,14 @@ export interface OrderingAppointment {
   notes: string | null;
   startTime: string;
   durationMinutes: number;
+}
+
+export interface LoyaltyConfig {
+  pointsPerPound: number;
+  redemptionThreshold: number;
+  redemptionValue: number;
+  enrollmentBonus: number;
+  pointsExpiry: number;
 }
 
 export interface OrderingTable {
@@ -1006,6 +1015,7 @@ export class OrderingClient {
       tax:             num(raw['tax']),
       discount:        num(raw['discount'] ?? raw['discounts']),
       shipping:        num(raw['shipping']),
+      loyaltyDiscount: num(raw['loyalty_discount']),
       total:           num(raw['total']),
       paidTotal:       num(raw['paid_total'] ?? raw['paidTotal']),
       items:           ((raw['items'] as Array<Record<string, unknown>> | undefined) ?? []).map((it) => {
@@ -1412,6 +1422,25 @@ export class OrderingClient {
       query: { product_ids: productIds.join(',') },
     });
     return (raw.products ?? []).map((p) => this._mapProduct(p));
+  }
+
+  /** The tenant's loyalty conversion rules (points → currency). */
+  async getLoyaltyConfig(): Promise<LoyaltyConfig> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'GET',
+      path: '/v1/pos/loyalty/config',
+    });
+    const num = (v: unknown): number => {
+      const n = typeof v === 'string' ? parseFloat(v) : (v as number);
+      return Number.isFinite(n) ? n : 0;
+    };
+    return {
+      pointsPerPound:      num(raw['points_per_pound']),
+      redemptionThreshold: num(raw['redemption_threshold']),
+      redemptionValue:     num(raw['redemption_value']),
+      enrollmentBonus:     num(raw['enrollment_bonus']),
+      pointsExpiry:        num(raw['points_expiry']),
+    };
   }
 
   // ── Customer profile update ───────────────────────────────────────────────
