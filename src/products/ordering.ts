@@ -582,11 +582,16 @@ export class OrderingClient {
     this.onRateLimit(res.rateLimit);
     const raw = res.data;
     const list = (Array.isArray(raw) ? raw : ((raw[key] ?? raw['data'] ?? []) as unknown[])) as T[];
+    // Some endpoints nest counts under `pagination` (e.g. /catalog); read it so
+    // callers get a real total for page controls instead of just this page's length.
+    const pg = (raw['pagination'] as Record<string, unknown> | undefined) ?? {};
+    const perPage = (raw['limit'] ?? pg['per_page']) as number | undefined;
+    const page = pg['page'] as number | undefined;
     return {
       data: list,
-      total: (raw['total'] as number | undefined) ?? list.length,
-      limit: (raw['limit'] as number | undefined) ?? 50,
-      offset: (raw['offset'] as number | undefined) ?? 0,
+      total: (raw['total'] ?? pg['total']) as number | undefined ?? list.length,
+      limit: perPage ?? 50,
+      offset: page && perPage ? (page - 1) * perPage : ((raw['offset'] as number | undefined) ?? 0),
     };
   }
 
@@ -743,6 +748,10 @@ export class OrderingClient {
     categoryId?: string;
     search?: string;
     locationId?: string;
+    inStockOnly?: boolean;
+    sort?: 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'newest';
+    minPrice?: number;
+    maxPrice?: number;
     limit?: number;
     offset?: number;
   } = {}): Promise<OrderingListResponse<OrderingProduct>> {
@@ -756,6 +765,10 @@ export class OrderingClient {
         query: {
           category_id: opts.categoryId,
           search: opts.search,
+          ...(opts.inStockOnly ? { in_stock_only: true } : {}),
+          ...(opts.sort ? { sort: opts.sort } : {}),
+          ...(opts.minPrice !== undefined ? { min_price: opts.minPrice } : {}),
+          ...(opts.maxPrice !== undefined ? { max_price: opts.maxPrice } : {}),
           per_page: opts.limit ?? 40,
           page:
             opts.offset && opts.limit
