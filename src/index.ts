@@ -124,6 +124,7 @@ export type {
   ClassBookingResult,
   OrderingTable,
   LoyaltyConfig,
+  OrderReturn,
   OrderingStaff,
   OrderingListResponse,
   OrderingLocation,

@@ -140,6 +140,17 @@ export interface OrderingAppointment {
   durationMinutes: number;
 }
 
+export interface OrderReturn {
+  returnId: string;
+  orderId: string;
+  status: string;               // requested|approved|rejected|received|refunded
+  items: Array<{ productId: string; quantity: number; reason: string | null }>;
+  reason: string | null;
+  notes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface LoyaltyConfig {
   pointsPerPound: number;
   redemptionThreshold: number;
@@ -1440,6 +1451,57 @@ export class OrderingClient {
       redemptionValue:     num(raw['redemption_value']),
       enrollmentBonus:     num(raw['enrollment_bonus']),
       pointsExpiry:        num(raw['points_expiry']),
+    };
+  }
+
+  // ── Returns / RMA ───────────────────────────────────────────────────────────
+
+  async requestReturn(
+    orderId: string,
+    params: { reason: string; items?: Array<{ productId: string; quantity?: number; reason?: string }>; notes?: string; customerEmail?: string },
+  ): Promise<OrderReturn> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'POST',
+      path: `/v1/pos/orders/${orderId}/returns`,
+      body: {
+        reason: params.reason,
+        ...(params.notes !== undefined && { notes: params.notes }),
+        ...(params.customerEmail !== undefined && { customer_email: params.customerEmail }),
+        ...(params.items ? {
+          items: params.items.map((i) => ({
+            product_id: i.productId,
+            quantity: i.quantity ?? 1,
+            ...(i.reason !== undefined && { reason: i.reason }),
+          })),
+        } : {}),
+      },
+    });
+    return this._mapReturn(raw);
+  }
+
+  async listReturns(orderId: string): Promise<OrderReturn[]> {
+    const raw = await this.call<{ returns?: Array<Record<string, unknown>> }>({
+      method: 'GET',
+      path: `/v1/pos/orders/${orderId}/returns`,
+    });
+    return (raw.returns ?? []).map((r) => this._mapReturn(r));
+  }
+
+  private _mapReturn(raw: Record<string, unknown>): OrderReturn {
+    const items = (raw['items'] as Array<Record<string, unknown>> | undefined) ?? [];
+    return {
+      returnId:  (raw['return_id'] as string) ?? (raw['id'] as string) ?? '',
+      orderId:   (raw['order_id'] as string) ?? '',
+      status:    (raw['status'] as string) ?? 'requested',
+      items: items.map((i) => ({
+        productId: (i['product_id'] as string) ?? '',
+        quantity: Number(i['quantity'] ?? 1),
+        reason: (i['reason'] as string | null) ?? null,
+      })),
+      reason:    (raw['reason'] as string | null) ?? null,
+      notes:     (raw['notes'] as string | null) ?? null,
+      createdAt: (raw['created_at'] as string | null) ?? null,
+      updatedAt: (raw['updated_at'] as string | null) ?? null,
     };
   }
 
