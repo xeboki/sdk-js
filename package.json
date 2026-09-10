@@ -24,6 +24,9 @@
   },
   "keywords": ["xeboki", "sdk", "pos", "chat", "link", "removebg", "analytics"],
   "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
   "engines": {
     "node": ">=18.0.0"
   }

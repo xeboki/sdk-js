@@ -30,6 +30,13 @@ export class HttpClient {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
       Accept: 'application/json',
+      // Ask for an uncompressed body. We read and JSON.parse the bytes
+      // ourselves, so we must not depend on the runtime decompressing the
+      // response — Node's fetch (undici) advertises brotli by default but does
+      // not decode `br`, and strips the content-encoding header, leaving raw
+      // compressed bytes that JSON.parse chokes on. Requesting identity keeps
+      // the body plain everywhere.
+      'Accept-Encoding': 'identity',
     };
 
     let bodyPayload: BodyInit | undefined;

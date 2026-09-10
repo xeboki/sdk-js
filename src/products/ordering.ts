@@ -144,6 +144,18 @@ export interface OrderingTable {
   section: string | null;
 }
 
+/** A location the merchant has enabled for online ordering. */
+export interface OrderingLocation {
+  id: string;
+  name: string;
+  address: Record<string, unknown> | string | null;
+  phone: string | null;
+  email: string | null;
+  timezone: string | null;
+  currency: string | null;
+  isActive: boolean;
+}
+
 export interface OrderingStaff {
   id: string;
   name: string;
@@ -186,8 +198,14 @@ export interface CreateOrderItem {
 }
 
 export interface CreateOrderingOrderParams {
+  /** pickup | delivery | dine_in | takeaway — the API rejects anything else. */
   orderType: string;
   items: CreateOrderItem[];
+  /**
+   * Optional. Omit it and the API resolves the business's sole location;
+   * a business with several locations must name one.
+   */
+  locationId?: string;
   customerId?: string;
   /** Guest contact info — used when no customerId is provided (guest checkout). */
   guestName?: string;
@@ -198,6 +216,10 @@ export interface CreateOrderingOrderParams {
   deliveryAddress?: string;
   idempotencyKey?: string;
   loyaltyPointsRedeemed?: number;
+  /** Promo code applied to the goods before tax. */
+  discountCode?: string;
+  /** Gift card spent against the finished total. */
+  giftCardCode?: string;
 }
 
 export interface StoreConfig {
@@ -542,6 +564,68 @@ export class OrderingClient {
     };
   }
 
+  /**
+   * The catalog API answers in snake_case; OrderingProduct is camelCase. Without
+   * this every consumer read `undefined` for isActive, imageUrl, hasVariants and
+   * the rest — the storefront showed every product as "Sold Out" (missing
+   * isActive) with no image or add button.
+   */
+  private _mapProduct(raw: Record<string, unknown>): OrderingProduct {
+    const num = (v: unknown): number => {
+      const n = typeof v === 'string' ? parseFloat(v) : (v as number);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const variants = (raw['variants'] as Array<Record<string, unknown>> | undefined) ?? [];
+    const groups   = (raw['modifier_groups'] as Array<Record<string, unknown>> | undefined) ?? [];
+    return {
+      id:            raw['id'] as string,
+      name:          (raw['name'] as string) ?? '',
+      price:         num(raw['price']),
+      // The catalog list is pre-filtered to active products and omits the flag;
+      // the detail endpoint sends is_active. Default true so a missing field
+      // never reads as "sold out".
+      isActive:      (raw['is_active'] as boolean | undefined) ?? true,
+      trackInventory:(raw['track_inventory'] as boolean | undefined) ?? false,
+      description:   (raw['description'] as string | null) ?? null,
+      imageUrl:      (raw['image_url'] as string | null) ?? null,
+      categoryId:    (raw['category_id'] as string | null) ?? null,
+      categoryName:  (raw['category_name'] as string | null) ?? null,
+      stockQuantity:
+        raw['stock'] != null ? num(raw['stock'])
+        : raw['stock_quantity'] != null ? num(raw['stock_quantity'])
+        : null,
+      hasVariants:   (raw['has_variants'] as boolean | undefined) ?? false,
+      variantOptions:(raw['variant_options'] as VariantOption[] | undefined) ?? [],
+      variants: variants.map((v) => ({
+        id:             v['id'] as string,
+        label:          (v['label'] as string) ?? '',
+        attributes:     (v['attributes'] as Record<string, string>) ?? {},
+        sku:            (v['sku'] as string | null) ?? null,
+        barcode:        (v['barcode'] as string | null) ?? null,
+        imageUrl:       (v['image_url'] as string | null) ?? null,
+        price:          v['price'] == null ? null : num(v['price']),
+        compareAtPrice: v['compare_at_price'] == null ? null : num(v['compare_at_price']),
+        stock:          num(v['stock']),
+        stockByLocation:(v['stock_by_location'] as Record<string, number>) ?? {},
+        sortOrder:      num(v['sort_order']),
+      })),
+      modifierGroups: groups.map((g) => ({
+        id:            g['id'] as string,
+        name:          (g['name'] as string) ?? '',
+        required:      (g['required'] as boolean) ?? false,
+        minSelections: (g['min_selections'] as number | null) ?? null,
+        maxSelections: (g['max_selections'] as number | null) ?? null,
+        options: (((g['modifiers'] as Array<Record<string, unknown>> | undefined) ?? []).map((o) => ({
+          id:              o['id'] as string,
+          name:            (o['name'] as string) ?? '',
+          priceAdjustment: num(o['price_adjustment']),
+          isAvailable:     (o['is_active'] as boolean | undefined) ?? true,
+        }))),
+      })),
+      tags: (raw['tags'] as string[] | null) ?? [],
+    };
+  }
+
   // ── Startup validation ──────────────────────────────────────────────────────
 
   /** Validates the API key and POS subscription on app startup. */
@@ -568,18 +652,22 @@ export class OrderingClient {
    * Cache the result. The custom token expires in 1 hour.
    */
   async getFirebaseConfig(): Promise<OrderingFirebaseConfig> {
+    type FirebaseConfigShape = {
+      api_key: string;
+      project_id: string;
+      app_id: string;
+      auth_domain: string;
+      storage_bucket: string;
+      messaging_sender_id: string;
+    };
     const raw = await this.call<{
-      firebase_config?: {
-        api_key: string;
-        project_id: string;
-        app_id: string;
-        auth_domain: string;
-        storage_bucket: string;
-        messaging_sender_id: string;
-      };
+      firebase_config?: FirebaseConfigShape;
       custom_token?: string;
     }>({ method: 'GET', path: '/v1/pos/firebase-config' });
-    const cfg = raw.firebase_config ?? (raw as typeof raw.firebase_config)!;
+    // The endpoint returns the config nested under `firebase_config` on some
+    // deployments and flat at the top level on others. The previous cast named
+    // an optional type (so it included `undefined`) and would not compile.
+    const cfg = raw.firebase_config ?? (raw as unknown as FirebaseConfigShape);
     return {
       apiKey: cfg.api_key,
       projectId: cfg.project_id,
@@ -618,7 +706,9 @@ export class OrderingClient {
 
   async listCategories(opts: { locationId?: string } = {}): Promise<OrderingListResponse<OrderingCategory>> {
     return this.callList<OrderingCategory>(
-      { method: 'GET', path: '/v1/pos/catalog/categories', query: { location_id: opts.locationId } },
+      // API serves the list at /categories; /catalog/categories matched the
+      // single-product route (/catalog/{id}) and 404'd "Product not found".
+      { method: 'GET', path: '/v1/pos/categories', query: { location_id: opts.locationId } },
       'categories',
     );
   }
@@ -630,27 +720,34 @@ export class OrderingClient {
     limit?: number;
     offset?: number;
   } = {}): Promise<OrderingListResponse<OrderingProduct>> {
-    return this.callList<OrderingProduct>(
+    const res = await this.callList<Record<string, unknown>>(
       {
         method: 'GET',
-        path: '/v1/pos/catalog/products',
+        // API serves the list at /catalog; /catalog/products matched the
+        // single-product route (/catalog/{id}) and 404'd. It paginates by
+        // page/per_page, not limit/offset.
+        path: '/v1/pos/catalog',
         query: {
           category_id: opts.categoryId,
           search: opts.search,
-          location_id: opts.locationId,
-          limit: opts.limit ?? 40,
-          offset: opts.offset ?? 0,
+          per_page: opts.limit ?? 40,
+          page:
+            opts.offset && opts.limit
+              ? Math.floor(opts.offset / opts.limit) + 1
+              : 1,
         },
       },
       'products',
     );
+    return { ...res, data: res.data.map((p) => this._mapProduct(p)) };
   }
 
   async getProduct(id: string): Promise<OrderingProduct> {
-    const raw = await this.call<{ product?: OrderingProduct } | OrderingProduct>(
-      { method: 'GET', path: `/v1/pos/catalog/products/${id}` },
+    const raw = await this.call<Record<string, unknown>>(
+      { method: 'GET', path: `/v1/pos/catalog/${id}` },
     );
-    return ('product' in raw && raw.product) ? raw.product : raw as OrderingProduct;
+    const body = ('product' in raw && raw.product ? raw.product : raw) as Record<string, unknown>;
+    return this._mapProduct(body);
   }
 
   // ── Customer auth ───────────────────────────────────────────────────────────
@@ -698,7 +795,15 @@ export class OrderingClient {
     code: string,
     opts: { orderTotal?: number; locationId?: string } = {},
   ): Promise<DiscountValidation> {
-    return this.call({
+    // The endpoint answers in snake_case like the rest of the API; this used to
+    // return the raw body, so `discountAmount` was always undefined.
+    const raw = await this.call<{
+      valid: boolean;
+      reason: string | null;
+      type: string | null;
+      value: number | null;
+      discount_amount: number | null;
+    }>({
       method: 'POST',
       path: '/v1/pos/discounts/validate',
       body: {
@@ -707,6 +812,13 @@ export class OrderingClient {
         ...(opts.locationId !== undefined && { location_id: opts.locationId }),
       },
     });
+    return {
+      valid: raw.valid,
+      type: raw.type ?? null,
+      reason: raw.reason ?? null,
+      value: raw.value ?? null,
+      discountAmount: raw.discount_amount ?? null,
+    };
   }
 
   // ── Orders ──────────────────────────────────────────────────────────────────
@@ -717,7 +829,7 @@ export class OrderingClient {
     limit?: number;
     offset?: number;
   } = {}): Promise<OrderingListResponse<OrderingOrder>> {
-    return this.callList<OrderingOrder>(
+    const res = await this.callList<Record<string, unknown>>(
       {
         method: 'GET',
         path: '/v1/pos/orders',
@@ -730,43 +842,104 @@ export class OrderingClient {
       },
       'orders',
     );
+    return { ...res, data: res.data.map((o) => this._mapOrder(o)) };
   }
 
   async getOrder(id: string): Promise<OrderingOrder> {
-    const raw = await this.call<{ order?: OrderingOrder } | OrderingOrder>(
+    const raw = await this.call<Record<string, unknown>>(
       { method: 'GET', path: `/v1/pos/orders/${id}` },
     );
-    return ('order' in raw && raw.order) ? raw.order : raw as OrderingOrder;
+    const body = ('order' in raw && raw.order ? raw.order : raw) as Record<string, unknown>;
+    return this._mapOrder(body);
   }
 
   async createOrder(params: CreateOrderingOrderParams): Promise<OrderingOrder> {
-    const raw = await this.call<{ order?: OrderingOrder } | OrderingOrder>({
+    const raw = await this.call<Record<string, unknown>>({
       method: 'POST',
       path: '/v1/pos/orders',
       body: {
         order_type: params.orderType,
-        items: params.items,
+        // The API's OrderItemIn is snake_case (product_id, variant_id). Passing
+        // the camelCase params straight through sent {productId,...}, which
+        // Pydantic rejected as a missing product_id — every order 422'd.
+        items: params.items.map((it) => ({
+          product_id: it.productId,
+          quantity: it.quantity,
+          ...(it.variantId !== undefined && { variant_id: it.variantId }),
+          ...(it.modifiers !== undefined && { modifiers: it.modifiers }),
+          ...(it.notes !== undefined && { notes: it.notes }),
+        })),
+        ...(params.locationId !== undefined && { location_id: params.locationId }),
         ...(params.customerId !== undefined && { customer_id: params.customerId }),
         ...(params.guestName !== undefined && { guest_name: params.guestName }),
         ...(params.guestEmail !== undefined && { guest_email: params.guestEmail }),
         ...(params.notes !== undefined && { notes: params.notes }),
-        ...(params.tableId !== undefined && { table_id: params.tableId }),
+        ...(params.tableId !== undefined && { table_number: params.tableId }),
         ...(params.scheduledAt !== undefined && { scheduled_at: params.scheduledAt }),
         ...(params.deliveryAddress !== undefined && { delivery_address: params.deliveryAddress }),
         ...(params.idempotencyKey !== undefined && { idempotency_key: params.idempotencyKey }),
         ...(params.loyaltyPointsRedeemed !== undefined && params.loyaltyPointsRedeemed > 0 && {
           loyalty_points_redeemed: params.loyaltyPointsRedeemed,
         }),
+        ...(params.discountCode !== undefined && { discount_code: params.discountCode }),
+        ...(params.giftCardCode !== undefined && { gift_card_code: params.giftCardCode }),
       },
     });
-    return ('order' in raw && raw.order) ? raw.order : raw as OrderingOrder;
+    // The create response is snake_case and nests nothing: order_id, not id.
+    // Returning it raw left order.id undefined, so the storefront redirected to
+    // /orders/undefined even though the order was created.
+    const body = ('order' in raw && raw.order ? raw.order : raw) as Record<string, unknown>;
+    return this._mapOrder(body);
+  }
+
+  /** Maps the API's snake_case order shape to OrderingOrder. */
+  private _mapOrder(raw: Record<string, unknown>): OrderingOrder {
+    const num = (v: unknown): number => {
+      const n = typeof v === 'string' ? parseFloat(v) : (v as number);
+      return Number.isFinite(n) ? n : 0;
+    };
+    return {
+      id:              (raw['id'] as string) ?? (raw['order_id'] as string) ?? '',
+      orderNumber:     (raw['order_number'] as string) ?? (raw['orderNumber'] as string) ?? '',
+      status:          (raw['status'] as string) ?? '',
+      orderType:       (raw['order_type'] as string) ?? (raw['orderType'] as string) ?? '',
+      subtotal:        num(raw['subtotal']),
+      tax:             num(raw['tax']),
+      discount:        num(raw['discount'] ?? raw['discounts']),
+      total:           num(raw['total']),
+      paidTotal:       num(raw['paid_total'] ?? raw['paidTotal']),
+      items:           ((raw['items'] as Array<Record<string, unknown>> | undefined) ?? []).map((it) => {
+        const mods = (it['modifiers'] as Array<Record<string, unknown>> | undefined) ?? [];
+        return {
+          productId:         (it['product_id'] as string) ?? (it['productId'] as string) ?? '',
+          variantId:         (it['variant_id'] as string | null) ?? null,
+          variantLabel:      (it['variant_label'] as string | null) ?? null,
+          variantAttributes: (it['variant_attributes'] as Record<string, string> | null) ?? null,
+          productName:       (it['product_name'] as string) ?? (it['productName'] as string) ?? '',
+          quantity:          num(it['quantity']),
+          unitPrice:         num(it['unit_price'] ?? it['unitPrice']),
+          totalPrice:        num(it['total_price'] ?? it['totalPrice']),
+          // The type wants a list of names; the API stores modifier objects.
+          // Default to [] so consumers can read .length without a guard.
+          modifierNames:     mods.map((m) => (m['name'] as string) ?? '').filter(Boolean),
+          notes:             (it['notes'] as string | null) ?? null,
+        };
+      }),
+      customerId:      (raw['customer_id'] as string | null) ?? null,
+      tableId:         (raw['table_number'] as string | null) ?? (raw['table_id'] as string | null) ?? null,
+      notes:           (raw['notes'] as string | null) ?? null,
+      reference:       (raw['external_reference'] as string | null) ?? (raw['reference'] as string | null) ?? null,
+      deliveryAddress: (raw['delivery_address'] as string | null) ?? null,
+      scheduledAt:     (raw['scheduled_at'] as string | null) ?? null,
+      createdAt:       (raw['created_at'] as string) ?? (raw['createdAt'] as string) ?? '',
+    };
   }
 
   async payOrder(
     id: string,
     params: { method: string; amount: number; reference?: string },
   ): Promise<OrderingOrder> {
-    const raw = await this.call<{ order?: OrderingOrder } | OrderingOrder>({
+    const raw = await this.call<Record<string, unknown>>({
       method: 'POST',
       path: `/v1/pos/orders/${id}/pay`,
       body: {
@@ -775,7 +948,11 @@ export class OrderingClient {
         ...(params.reference !== undefined && { reference: params.reference }),
       },
     });
-    return ('order' in raw && raw.order) ? raw.order : raw as OrderingOrder;
+    const body = ('order' in raw && raw.order ? raw.order : raw) as Record<string, unknown>;
+    // Falls back to the id we paid against — the pay response may echo only a
+    // status, and the caller still needs the order id to redirect.
+    if (body['id'] === undefined && body['order_id'] === undefined) body['id'] = id;
+    return this._mapOrder(body);
   }
 
   // ── Tables ──────────────────────────────────────────────────────────────────
@@ -784,6 +961,18 @@ export class OrderingClient {
     return this.callList<OrderingTable>(
       { method: 'GET', path: '/v1/pos/tables', query: { location_id: opts.locationId, status: opts.status } },
       'tables',
+    );
+  }
+
+  /**
+   * Locations the merchant has enabled for online ordering. This is the API's
+   * own "single source of truth" for where a storefront order can be fulfilled
+   * — a headless client should not hard-code a location id.
+   */
+  async listLocations(): Promise<OrderingListResponse<OrderingLocation>> {
+    return this.callList<OrderingLocation>(
+      { method: 'GET', path: '/v1/pos/locations' },
+      'locations',
     );
   }
 
@@ -1093,11 +1282,12 @@ export class OrderingClient {
   /** Fetches a product by its URL slug — use for SEO-friendly product pages. */
   async getProductBySlug(slug: string): Promise<OrderingProduct | null> {
     try {
-      const raw = await this.call<{ product?: OrderingProduct } | OrderingProduct>({
+      const raw = await this.call<Record<string, unknown>>({
         method: 'GET',
         path: `/v1/pos/catalog/slug/${encodeURIComponent(slug)}`,
       });
-      return ('product' in raw && raw.product) ? raw.product : raw as OrderingProduct;
+      const body = ('product' in raw && raw.product ? raw.product : raw) as Record<string, unknown>;
+      return this._mapProduct(body);
     } catch {
       return null;
     }
