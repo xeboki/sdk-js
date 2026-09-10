@@ -1454,6 +1454,43 @@ export class OrderingClient {
     };
   }
 
+  // ── Delivery, meal deals, discounts (list) ────────────────────────────────
+  // Lean proxies for secondary storefront/mobile features; callers map the
+  // returned records to their own view models.
+
+  async listMealDeals(opts: { locationId?: string } = {}): Promise<Array<Record<string, unknown>>> {
+    const raw = await this.call<{ deals?: unknown[]; meal_deals?: unknown[] }>({
+      method: 'GET', path: '/v1/pos/meal-deals', query: { location_id: opts.locationId },
+    });
+    return ((raw.deals ?? raw.meal_deals ?? []) as Array<Record<string, unknown>>);
+  }
+
+  async getDeliveryZones(opts: { locationId?: string } = {}): Promise<Record<string, unknown>> {
+    return this.call<Record<string, unknown>>({
+      method: 'GET', path: '/v1/pos/delivery/zones', query: { location_id: opts.locationId },
+    });
+  }
+
+  async validatePostcode(postcode: string, opts: { locationId?: string } = {}): Promise<Record<string, unknown>> {
+    return this.call<Record<string, unknown>>({
+      method: 'POST', path: '/v1/pos/delivery/validate-postcode',
+      body: { postcode, ...(opts.locationId !== undefined && { location_id: opts.locationId }) },
+    });
+  }
+
+  async getDeliveryTracking(orderId: string): Promise<Record<string, unknown>> {
+    return this.call<Record<string, unknown>>({
+      method: 'GET', path: `/v1/pos/orders/${orderId}/delivery/tracking`,
+    });
+  }
+
+  async listDiscounts(opts: { code?: string } = {}): Promise<Array<Record<string, unknown>>> {
+    const raw = await this.call<{ discounts?: unknown[] }>({
+      method: 'GET', path: '/v1/pos/discounts', query: { code: opts.code },
+    });
+    return ((raw.discounts ?? []) as Array<Record<string, unknown>>);
+  }
+
   // ── Abandoned carts ───────────────────────────────────────────────────────
 
   async captureAbandonedCart(params: {
