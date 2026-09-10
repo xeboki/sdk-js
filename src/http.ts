@@ -18,10 +18,12 @@ export interface HttpResponse<T> {
 export class HttpClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  private readonly defaultHeaders: Record<string, string>;
 
-  constructor(baseUrl: string, apiKey: string) {
+  constructor(baseUrl: string, apiKey: string, defaultHeaders: Record<string, string> = {}) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.apiKey = apiKey;
+    this.defaultHeaders = defaultHeaders;
   }
 
   async request<T>(opts: RequestOptions): Promise<HttpResponse<T>> {
@@ -37,6 +39,8 @@ export class HttpClient {
       // compressed bytes that JSON.parse chokes on. Requesting identity keeps
       // the body plain everywhere.
       'Accept-Encoding': 'identity',
+      // Caller-supplied defaults (e.g. a first-party storefront service secret).
+      ...this.defaultHeaders,
     };
 
     let bodyPayload: BodyInit | undefined;

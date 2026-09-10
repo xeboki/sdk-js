@@ -15,6 +15,12 @@ export interface XebokiClientOptions {
   apiKey: string;
   baseUrl?: string;
   timeout?: number;
+  /**
+   * Extra headers sent on every request. First-party callers (e.g. a storefront
+   * running server-side) pass a shared service secret here so the gateway can
+   * treat their traffic as first-party — do NOT expose this in a browser.
+   */
+  headers?: Record<string, string>;
 }
 
 export class XebokiClient {
@@ -44,7 +50,7 @@ export class XebokiClient {
     }
 
     const baseUrl = options.baseUrl ?? 'https://api.xeboki.com';
-    const http = new HttpClient(baseUrl, options.apiKey);
+    const http = new HttpClient(baseUrl, options.apiKey, options.headers ?? {});
 
     const onRateLimit = (info: RateLimitInfo) => {
       this._lastRateLimit = info;
