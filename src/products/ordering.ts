@@ -181,6 +181,17 @@ export interface KeyValidationResult {
   subPlan: string;
 }
 
+/** Public Firebase Web config for the tenant, used to run customer auth in a storefront. */
+export interface FirestoreBrowserConfig {
+  apiKey: string;
+  appId: string;
+  projectId: string;
+  authDomain: string;
+  messagingSenderId: string;
+  storageBucket: string | null;
+  measurementId: string | null;
+}
+
 export interface OrderingFirebaseConfig {
   apiKey: string;
   projectId: string;
@@ -767,30 +778,89 @@ export class OrderingClient {
 
   // ── Customer auth ───────────────────────────────────────────────────────────
 
-  async registerCustomer(params: {
-    email: string;
-    password: string;
+  /**
+   * Public (client-safe) Firebase config for the merchant's tenant project.
+   * A storefront initialises the Firebase Web SDK with this to run customer
+   * auth (createUser / signIn) against the tenant's own Firebase Auth.
+   */
+  async getFirestoreConfig(): Promise<FirestoreBrowserConfig> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'GET',
+      path: '/v1/pos/firestore-config',
+    });
+    return {
+      apiKey:            (raw['api_key'] as string) ?? '',
+      appId:             (raw['app_id'] as string) ?? '',
+      projectId:         (raw['project_id'] as string) ?? '',
+      authDomain:        (raw['auth_domain'] as string) ?? '',
+      messagingSenderId: (raw['messaging_sender_id'] as string) ?? '',
+      storageBucket:     (raw['storage_bucket'] as string | null) ?? null,
+      measurementId:     (raw['measurement_id'] as string | null) ?? null,
+    };
+  }
+
+  private _mapCustomerAuth(raw: Record<string, unknown>): CustomerAuth {
+    const c = (raw['customer'] as Record<string, unknown>) ?? {};
+    const num = (v: unknown): number => {
+      const n = typeof v === 'string' ? parseFloat(v) : (v as number);
+      return Number.isFinite(n) ? n : 0;
+    };
+    return {
+      token: (raw['token'] as string) ?? '',
+      customer: {
+        id:            (c['id'] as string) ?? '',
+        name:          (c['name'] as string) ?? (c['full_name'] as string) ?? '',
+        email:         (c['email'] as string | null) ?? null,
+        phone:         (c['phone'] as string | null) ?? null,
+        storeCredit:   num(c['store_credit'] ?? c['storeCredit']),
+        loyaltyPoints: num(c['loyalty_points'] ?? c['loyaltyPoints']),
+      },
+    };
+  }
+
+  /**
+   * Customer auth is Firebase-based: the client signs in against the tenant's
+   * Firebase Auth and exchanges the resulting ID token here for a Xeboki
+   * customer session. (There is no email/password endpoint — passwords live in
+   * Firebase, never in this API.)
+   */
+  async verifyCustomerToken(idToken: string): Promise<CustomerAuth> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'POST',
+      path: '/v1/pos/customers/firebase-verify',
+      body: { id_token: idToken },
+    });
+    return this._mapCustomerAuth(raw);
+  }
+
+  /** Creates the customer record from a freshly-registered Firebase user. */
+  async registerCustomerToken(params: {
+    idToken: string;
     fullName?: string;
     phone?: string;
-  }): Promise<CustomerAuth> {
-    return this.call({
+  }): Promise<OrderingCustomer> {
+    const raw = await this.call<{ customer?: Record<string, unknown> } | Record<string, unknown>>({
       method: 'POST',
-      path: '/v1/pos/customers/register',
+      path: '/v1/pos/customers/firebase-register',
       body: {
-        email: params.email,
-        password: params.password,
+        id_token: params.idToken,
         ...(params.fullName !== undefined && { full_name: params.fullName }),
         ...(params.phone !== undefined && { phone: params.phone }),
       },
     });
-  }
-
-  async loginCustomer(params: { email: string; password: string }): Promise<CustomerAuth> {
-    return this.call({
-      method: 'POST',
-      path: '/v1/pos/customers/login',
-      body: { email: params.email, password: params.password },
-    });
+    const c = (('customer' in raw && raw.customer) ? raw.customer : raw) as Record<string, unknown>;
+    const num = (v: unknown): number => {
+      const n = typeof v === 'string' ? parseFloat(v) : (v as number);
+      return Number.isFinite(n) ? n : 0;
+    };
+    return {
+      id:            (c['id'] as string) ?? '',
+      name:          (c['name'] as string) ?? (c['full_name'] as string) ?? '',
+      email:         (c['email'] as string | null) ?? null,
+      phone:         (c['phone'] as string | null) ?? null,
+      storeCredit:   num(c['store_credit'] ?? c['storeCredit']),
+      loyaltyPoints: num(c['loyalty_points'] ?? c['loyaltyPoints']),
+    };
   }
 
   async getCustomer(id: string): Promise<OrderingCustomer | null> {
