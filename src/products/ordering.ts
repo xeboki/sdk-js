@@ -1454,6 +1454,50 @@ export class OrderingClient {
     };
   }
 
+  // ── Abandoned carts ───────────────────────────────────────────────────────
+
+  async captureAbandonedCart(params: {
+    email: string;
+    items?: Array<Record<string, unknown>>;
+    cartTotal?: number;
+  }): Promise<{ cartId: string }> {
+    const raw = await this.call<{ cart_id?: string }>({
+      method: 'POST',
+      path: '/v1/pos/carts/abandon',
+      body: {
+        email: params.email,
+        items: params.items ?? [],
+        ...(params.cartTotal !== undefined && { cart_total: params.cartTotal }),
+      },
+    });
+    return { cartId: raw.cart_id ?? '' };
+  }
+
+  async listAbandonedCarts(opts: { minutes?: number; limit?: number } = {}): Promise<Array<{
+    cartId: string; email: string; items: Array<Record<string, unknown>>; total: number; createdAt: string | null;
+  }>> {
+    const raw = await this.call<{ carts?: Array<Record<string, unknown>> }>({
+      method: 'GET',
+      path: '/v1/pos/carts/abandoned',
+      query: { minutes: opts.minutes ?? 60, limit: opts.limit ?? 50 },
+    });
+    return (raw.carts ?? []).map((c) => ({
+      cartId: (c['cart_id'] as string) ?? '',
+      email: (c['email'] as string) ?? '',
+      items: (c['items'] as Array<Record<string, unknown>>) ?? [],
+      total: Number(c['total'] ?? 0),
+      createdAt: (c['created_at'] as string | null) ?? null,
+    }));
+  }
+
+  async markAbandonedCart(cartId: string, status: 'emailed' | 'recovered' | 'dismissed'): Promise<void> {
+    await this.call({
+      method: 'POST',
+      path: `/v1/pos/carts/${cartId}/mark`,
+      body: { status },
+    });
+  }
+
   // ── Returns / RMA ───────────────────────────────────────────────────────────
 
   async requestReturn(
