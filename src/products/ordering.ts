@@ -384,6 +384,12 @@ export interface StorefrontConfig {
   defaultDeliveryFee: number;
   /** POS locations configured as fulfillment points. */
   fulfillmentLocations: FulfillmentLocation[];
+  /**
+   * How buyers browse the catalog across online stores:
+   * 'unified' (one merged catalog, fulfilling store chosen at checkout) or
+   * 'location_first' (pick a store, see its own available in-stock catalog).
+   */
+  catalogMode: string;
   updatedAt: string | null;
 }
 
@@ -864,6 +870,8 @@ export class OrderingClient {
           ...(opts.sort ? { sort: opts.sort } : {}),
           ...(opts.minPrice !== undefined ? { min_price: opts.minPrice } : {}),
           ...(opts.maxPrice !== undefined ? { max_price: opts.maxPrice } : {}),
+          // Location-first browsing: scope stock + availability to one store.
+          ...(opts.locationId ? { location_id: opts.locationId } : {}),
           per_page: opts.limit ?? 40,
           page:
             opts.offset && opts.limit
@@ -1413,6 +1421,7 @@ export class OrderingClient {
           minDays:               (l['min_days'] as number) ?? 1,
           maxDays:               (l['max_days'] as number) ?? 3,
         })),
+      catalogMode:             (raw['catalog_mode'] as string) ?? 'unified',
       updatedAt:               (raw['updated_at'] as string | null) ?? null,
     };
   }
