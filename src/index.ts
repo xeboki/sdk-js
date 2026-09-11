@@ -135,6 +135,7 @@ export type {
   CreateOrderingOrderParams,
   CreateAppointmentParams,
   StoreConfig,
+  StorePaymentMethod,
   StorefrontConfig,
   FulfillmentLocation,
   UpdateStorefrontConfigParams,

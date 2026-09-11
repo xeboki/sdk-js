@@ -258,6 +258,18 @@ export interface CreateOrderingOrderParams {
   shippingAmount?: number;
 }
 
+/** A buyer-facing payment method, from the merchant's single Payment Methods config. */
+export interface StorePaymentMethod {
+  /** Canonical method key, e.g. 'card' | 'cod' | 'gift_card'. */
+  key: string;
+  /** Display label (merchant's custom label, else a default). */
+  label: string;
+  /** Checkout flow to run: 'stripe' | 'paypal' | 'manual' (pay later / COD). */
+  gateway: string;
+  /** Display order shared with the POS checkout. */
+  order: number;
+}
+
 export interface StoreConfig {
   businessType: string;
   businessName: string;
@@ -270,6 +282,12 @@ export interface StoreConfig {
   supportPhone: string;
   website: string;
   address: Record<string, unknown>;
+  /**
+   * Enabled online payment methods, in order — the single source shared with
+   * the POS checkout (Payment Methods dialog). The storefront renders exactly
+   * these; it hardcodes no payment method.
+   */
+  paymentMethods: StorePaymentMethod[];
 }
 
 export interface NavLink {
@@ -1329,6 +1347,13 @@ export class OrderingClient {
       supportPhone:   raw['support_phone'] as string,
       website:        raw['website'] as string,
       address:        (raw['address'] ?? {}) as Record<string, unknown>,
+      paymentMethods: ((raw['payment_methods'] as Record<string, unknown>[]) ?? [])
+        .map((m) => ({
+          key:     (m['key'] as string) ?? '',
+          label:   (m['label'] as string) ?? '',
+          gateway: (m['gateway'] as string) ?? 'manual',
+          order:   (m['order'] as number) ?? 0,
+        })),
     };
   }
 
