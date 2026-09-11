@@ -283,6 +283,37 @@ export interface FooterColumn {
   links: NavLink[];
 }
 
+/**
+ * One POS location as a storefront fulfillment point (city/location-based model).
+ *
+ * The storefront resolves a buyer's city to the branch that serves it and
+ * charges that branch's delivery fee, offers its pickup point, and applies its
+ * local tax. A city no branch serves falls back to the store-level defaults.
+ */
+export interface FulfillmentLocation {
+  locationId: string;
+  locationName: string;
+  /** The branch's own city. */
+  city: string;
+  deliveryEnabled: boolean;
+  deliveryFee: number;
+  /** Subtotal at/above which this branch delivers free; null = never. */
+  freeShippingThreshold: number | null;
+  deliveryRadiusKm: number;
+  minOrder: number;
+  /** Cities/areas this branch delivers to (lowercased match at checkout). */
+  servedCities: string[];
+  pickupEnabled: boolean;
+  pickupAddress: string;
+  pickupInstructions: string;
+  /** Local tax %, applied to orders this branch fulfills. */
+  taxRate: number;
+  /** Per-branch currency; null = store default. */
+  currency: string | null;
+  minDays: number;
+  maxDays: number;
+}
+
 export interface StorefrontConfig {
   storefrontSlug: string | null;
   isPublished: boolean;
@@ -324,6 +355,17 @@ export interface StorefrontConfig {
   ga4MeasurementId: string | null;
   /** Meta (Facebook) Pixel ID for this store, if set. */
   metaPixelId: string | null;
+  // ── Multi-location fulfillment (city/location-based) ──
+  /** Store currency (ISO code), e.g. 'GBP'. Null = deployment default. */
+  defaultCurrency: string | null;
+  /** Whether displayed prices already include tax. */
+  taxInclusive: boolean;
+  /** Fallback tax % for a city no branch serves. */
+  defaultTaxRate: number;
+  /** Fallback delivery fee for a city no branch serves. */
+  defaultDeliveryFee: number;
+  /** POS locations configured as fulfillment points. */
+  fulfillmentLocations: FulfillmentLocation[];
   updatedAt: string | null;
 }
 
@@ -1323,6 +1365,29 @@ export class OrderingClient {
       freeShippingThreshold:   (raw['free_shipping_threshold'] as number | null) ?? null,
       ga4MeasurementId:        (raw['ga4_measurement_id'] as string | null) ?? null,
       metaPixelId:             (raw['meta_pixel_id'] as string | null) ?? null,
+      defaultCurrency:         (raw['default_currency'] as string | null) ?? null,
+      taxInclusive:            (raw['tax_inclusive'] as boolean) ?? false,
+      defaultTaxRate:          (raw['default_tax_rate'] as number) ?? 0,
+      defaultDeliveryFee:      (raw['default_delivery_fee'] as number) ?? 0,
+      fulfillmentLocations:    ((raw['fulfillment_locations'] as Record<string, unknown>[]) ?? [])
+        .map((l) => ({
+          locationId:            (l['location_id'] as string) ?? '',
+          locationName:          (l['location_name'] as string) ?? '',
+          city:                  (l['city'] as string) ?? '',
+          deliveryEnabled:       (l['delivery_enabled'] as boolean) ?? true,
+          deliveryFee:           (l['delivery_fee'] as number) ?? 0,
+          freeShippingThreshold: (l['free_shipping_threshold'] as number | null) ?? null,
+          deliveryRadiusKm:      (l['delivery_radius_km'] as number) ?? 0,
+          minOrder:              (l['min_order'] as number) ?? 0,
+          servedCities:          (l['served_cities'] as string[]) ?? [],
+          pickupEnabled:         (l['pickup_enabled'] as boolean) ?? true,
+          pickupAddress:         (l['pickup_address'] as string) ?? '',
+          pickupInstructions:    (l['pickup_instructions'] as string) ?? '',
+          taxRate:               (l['tax_rate'] as number) ?? 0,
+          currency:              (l['currency'] as string | null) ?? null,
+          minDays:               (l['min_days'] as number) ?? 1,
+          maxDays:               (l['max_days'] as number) ?? 3,
+        })),
       updatedAt:               (raw['updated_at'] as string | null) ?? null,
     };
   }

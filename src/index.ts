@@ -136,6 +136,7 @@ export type {
   CreateAppointmentParams,
   StoreConfig,
   StorefrontConfig,
+  FulfillmentLocation,
   UpdateStorefrontConfigParams,
   StripePaymentIntent,
   GiftCard,
