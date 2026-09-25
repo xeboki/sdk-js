@@ -168,6 +168,20 @@ export interface OrderingTable {
 }
 
 /** A location the merchant has enabled for online ordering. */
+/** One day's trading hours. `closed` and empty times mean shut that day. */
+export interface OpeningHours {
+  opens: string;
+  closes: string;
+  closed: boolean;
+}
+
+export type Weekday =
+  | 'monday' | 'tuesday' | 'wednesday' | 'thursday'
+  | 'friday' | 'saturday' | 'sunday';
+
+/** Only the days the merchant filled in — an absent day is "never said". */
+export type WeeklyHours = Partial<Record<Weekday, OpeningHours>>;
+
 export interface OrderingLocation {
   id: string;
   name: string;
@@ -177,6 +191,8 @@ export interface OrderingLocation {
   timezone: string | null;
   currency: string | null;
   isActive: boolean;
+  /** Null when the merchant has not set trading hours for this branch. */
+  hours: WeeklyHours | null;
 }
 
 export interface OrderingStaff {
@@ -1186,10 +1202,27 @@ export class OrderingClient {
    * — a headless client should not hard-code a location id.
    */
   async listLocations(): Promise<OrderingListResponse<OrderingLocation>> {
-    return this.callList<OrderingLocation>(
+    // Mapped rather than cast: the endpoint answers in snake_case, so a plain
+    // cast left `isActive` undefined on every location — the same mismatch that
+    // once showed every product as Sold Out. See _mapProduct.
+    const res = await this.callList<Record<string, unknown>>(
       { method: 'GET', path: '/v1/pos/locations' },
       'locations',
     );
+    return {
+      ...res,
+      data: res.data.map((raw): OrderingLocation => ({
+        id:       (raw['id'] as string) ?? '',
+        name:     (raw['name'] as string) ?? '',
+        address:  (raw['address'] as Record<string, unknown> | string | null) ?? null,
+        phone:    (raw['phone'] as string | null) ?? null,
+        email:    (raw['email'] as string | null) ?? null,
+        timezone: (raw['timezone'] as string | null) ?? null,
+        currency: (raw['currency'] as string | null) ?? null,
+        isActive: (raw['is_active'] as boolean) ?? true,
+        hours:    (raw['hours'] as WeeklyHours | null) ?? null,
+      })),
+    };
   }
 
   // ── Appointments ─────────────────────────────────────────────────────────────
