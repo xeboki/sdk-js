@@ -335,10 +335,14 @@ export interface FulfillmentLocation {
 export interface StorefrontConfig {
   storefrontSlug: string | null;
   isPublished: boolean;
+  /** Theme preset id the storefront paints from — 'classic' | 'modern' | 'warm' | 'minimal' | 'bold' | 'vibrant'. */
   theme: string;
   primaryColor: string;
   secondaryColor: string;
+  /** Body font family. Empty = the preset's own. */
   font: string;
+  /** Heading font family. Empty = falls back to `font`, then the preset's. */
+  headingFont: string | null;
   logoUrl: string | null;
   faviconUrl: string | null;
   heroImageUrl: string | null;
@@ -400,6 +404,7 @@ export interface UpdateStorefrontConfigParams {
   primaryColor?: string;
   secondaryColor?: string;
   font?: string;
+  headingFont?: string;
   logoUrl?: string;
   faviconUrl?: string;
   heroImageUrl?: string;
@@ -1371,10 +1376,11 @@ export class OrderingClient {
     return {
       storefrontSlug:          (raw['storefront_slug'] as string | null) ?? null,
       isPublished:             (raw['is_published'] as boolean) ?? false,
-      theme:                   (raw['theme'] as string) ?? 'minimal',
+      theme:                   (raw['theme'] as string) ?? 'classic',
       primaryColor:            (raw['primary_color'] as string) ?? '#000000',
       secondaryColor:          (raw['secondary_color'] as string) ?? '#ffffff',
       font:                    (raw['font'] as string) ?? 'inter',
+      headingFont:             (raw['heading_font'] as string | null) ?? null,
       logoUrl:                 (raw['logo_url'] as string | null) ?? null,
       faviconUrl:              (raw['favicon_url'] as string | null) ?? null,
       heroImageUrl:            (raw['hero_image_url'] as string | null) ?? null,
@@ -1438,6 +1444,7 @@ export class OrderingClient {
         ...(params.primaryColor !== undefined && { primary_color: params.primaryColor }),
         ...(params.secondaryColor !== undefined && { secondary_color: params.secondaryColor }),
         ...(params.font !== undefined && { font: params.font }),
+        ...(params.headingFont !== undefined && { heading_font: params.headingFont }),
         ...(params.logoUrl !== undefined && { logo_url: params.logoUrl }),
         ...(params.faviconUrl !== undefined && { favicon_url: params.faviconUrl }),
         ...(params.heroImageUrl !== undefined && { hero_image_url: params.heroImageUrl }),
