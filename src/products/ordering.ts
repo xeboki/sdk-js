@@ -441,11 +441,24 @@ export interface StorefrontConfig {
   font: string;
   /** Heading font family. Empty = falls back to `font`, then the preset's. */
   headingFont: string | null;
+  /**
+   * The merchant's page background. Empty = the preset's own — and it is
+   * empty unless they switched the picker on, because the Design screen
+   * shipped that field pre-filled with a colour nobody chose.
+   */
+  backgroundColor: string;
+  backgroundCustom: boolean;
   logoUrl: string | null;
   faviconUrl: string | null;
   heroImageUrl: string | null;
   heroTitle: string;
   heroSubtitle: string;
+  /** The hero's primary button. Blank = "Shop now" to the catalog. */
+  heroCtaText: string;
+  heroCtaUrl: string;
+  /** The hero's second button. A blank label hides it. */
+  heroSecondaryCtaText: string;
+  heroSecondaryCtaUrl: string;
   featuredCategoryIds: string[];
   featuredProductIds: string[];
   announcementBar: string | null;
@@ -457,6 +470,10 @@ export interface StorefrontConfig {
   trustItems: TrustItem[];
   /** Per-band wording. A blank field falls back to the storefront's own. */
   sectionCopy: StorefrontSectionCopy;
+  /** A line under the store name in the footer. Empty = none. */
+  footerTagline: string;
+  footerShowSocial: boolean;
+  footerShowAddress: boolean;
   seoTitle: string;
   seoDescription: string;
   /** Title template used on inner pages — %s is replaced by page title. Default: '%s | {businessName}' */
@@ -516,6 +533,10 @@ export interface UpdateStorefrontConfigParams {
   heroImageUrl?: string;
   heroTitle?: string;
   heroSubtitle?: string;
+  heroCtaText?: string;
+  heroCtaUrl?: string;
+  heroSecondaryCtaText?: string;
+  heroSecondaryCtaUrl?: string;
   featuredCategoryIds?: string[];
   featuredProductIds?: string[];
   announcementBar?: string;
@@ -523,6 +544,11 @@ export interface UpdateStorefrontConfigParams {
   heroStyle?: string;
   trustItems?: TrustItem[];
   sectionCopy?: StorefrontSectionCopy;
+  backgroundColor?: string;
+  backgroundCustom?: boolean;
+  footerTagline?: string;
+  footerShowSocial?: boolean;
+  footerShowAddress?: boolean;
   seoTitle?: string;
   seoDescription?: string;
   seoTitleTemplate?: string;
@@ -1539,11 +1565,17 @@ export class OrderingClient {
       secondaryColor:          (raw['secondary_color'] as string) ?? '#ffffff',
       font:                    (raw['font'] as string) ?? 'inter',
       headingFont:             (raw['heading_font'] as string | null) ?? null,
+      backgroundColor:         (raw['background_color'] as string) ?? '',
+      backgroundCustom:        (raw['background_custom'] as boolean) ?? false,
       logoUrl:                 (raw['logo_url'] as string | null) ?? null,
       faviconUrl:              (raw['favicon_url'] as string | null) ?? null,
       heroImageUrl:            (raw['hero_image_url'] as string | null) ?? null,
       heroTitle:               (raw['hero_title'] as string) ?? '',
       heroSubtitle:            (raw['hero_subtitle'] as string) ?? '',
+      heroCtaText:             (raw['hero_cta_text'] as string) ?? '',
+      heroCtaUrl:              (raw['hero_cta_url'] as string) ?? '',
+      heroSecondaryCtaText:    (raw['hero_secondary_cta_text'] as string) ?? '',
+      heroSecondaryCtaUrl:     (raw['hero_secondary_cta_url'] as string) ?? '',
       featuredCategoryIds:     (raw['featured_category_ids'] as string[]) ?? [],
       featuredProductIds:      (raw['featured_product_ids'] as string[]) ?? [],
       announcementBar:         (raw['announcement_bar'] as string | null) ?? null,
@@ -1551,6 +1583,9 @@ export class OrderingClient {
       heroStyle:               (raw['hero_style'] as string) ?? '',
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
+      footerTagline:           (raw['footer_tagline'] as string) ?? '',
+      footerShowSocial:        (raw['footer_show_social'] as boolean) ?? true,
+      footerShowAddress:       (raw['footer_show_address'] as boolean) ?? true,
       seoTitle:                (raw['seo_title'] as string) ?? '',
       seoDescription:          (raw['seo_description'] as string) ?? '',
       seoTitleTemplate:        (raw['seo_title_template'] as string | null) ?? null,
@@ -1608,11 +1643,17 @@ export class OrderingClient {
         ...(params.secondaryColor !== undefined && { secondary_color: params.secondaryColor }),
         ...(params.font !== undefined && { font: params.font }),
         ...(params.headingFont !== undefined && { heading_font: params.headingFont }),
+        ...(params.backgroundColor !== undefined && { background_color: params.backgroundColor }),
+        ...(params.backgroundCustom !== undefined && { background_custom: params.backgroundCustom }),
         ...(params.logoUrl !== undefined && { logo_url: params.logoUrl }),
         ...(params.faviconUrl !== undefined && { favicon_url: params.faviconUrl }),
         ...(params.heroImageUrl !== undefined && { hero_image_url: params.heroImageUrl }),
         ...(params.heroTitle !== undefined && { hero_title: params.heroTitle }),
         ...(params.heroSubtitle !== undefined && { hero_subtitle: params.heroSubtitle }),
+        ...(params.heroCtaText !== undefined && { hero_cta_text: params.heroCtaText }),
+        ...(params.heroCtaUrl !== undefined && { hero_cta_url: params.heroCtaUrl }),
+        ...(params.heroSecondaryCtaText !== undefined && { hero_secondary_cta_text: params.heroSecondaryCtaText }),
+        ...(params.heroSecondaryCtaUrl !== undefined && { hero_secondary_cta_url: params.heroSecondaryCtaUrl }),
         ...(params.featuredCategoryIds !== undefined && { featured_category_ids: params.featuredCategoryIds }),
         ...(params.featuredProductIds !== undefined && { featured_product_ids: params.featuredProductIds }),
         ...(params.announcementBar !== undefined && { announcement_bar: params.announcementBar }),
@@ -1620,6 +1661,9 @@ export class OrderingClient {
         ...(params.heroStyle !== undefined && { hero_style: params.heroStyle }),
         ...(params.trustItems !== undefined && { trust_items: params.trustItems }),
         ...(params.sectionCopy !== undefined && { section_copy: unmapSectionCopy(params.sectionCopy) }),
+        ...(params.footerTagline !== undefined && { footer_tagline: params.footerTagline }),
+        ...(params.footerShowSocial !== undefined && { footer_show_social: params.footerShowSocial }),
+        ...(params.footerShowAddress !== undefined && { footer_show_address: params.footerShowAddress }),
         ...(params.seoTitle !== undefined && { seo_title: params.seoTitle }),
         ...(params.seoDescription !== undefined && { seo_description: params.seoDescription }),
         ...(params.seoTitleTemplate !== undefined && { seo_title_template: params.seoTitleTemplate }),
