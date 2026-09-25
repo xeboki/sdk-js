@@ -889,9 +889,14 @@ export class OrderingClient {
     return { ...res, data: res.data.map((p) => this._mapProduct(p)) };
   }
 
-  async getProduct(id: string): Promise<OrderingProduct> {
+  /** [locationId] scopes stock to one store, matching listProducts(). */
+  async getProduct(id: string, locationId?: string): Promise<OrderingProduct> {
     const raw = await this.call<Record<string, unknown>>(
-      { method: 'GET', path: `/v1/pos/catalog/${id}` },
+      {
+        method: 'GET',
+        path: `/v1/pos/catalog/${id}`,
+        query: locationId ? { location_id: locationId } : undefined,
+      },
     );
     const body = ('product' in raw && raw.product ? raw.product : raw) as Record<string, unknown>;
     return this._mapProduct(body);
@@ -1529,11 +1534,13 @@ export class OrderingClient {
   // ── Product slug lookup ───────────────────────────────────────────────────
 
   /** Fetches a product by its URL slug — use for SEO-friendly product pages. */
-  async getProductBySlug(slug: string): Promise<OrderingProduct | null> {
+  /** [locationId] scopes stock to one store, matching listProducts(). */
+  async getProductBySlug(slug: string, locationId?: string): Promise<OrderingProduct | null> {
     try {
       const raw = await this.call<Record<string, unknown>>({
         method: 'GET',
         path: `/v1/pos/catalog/slug/${encodeURIComponent(slug)}`,
+        query: locationId ? { location_id: locationId } : undefined,
       });
       const body = ('product' in raw && raw.product ? raw.product : raw) as Record<string, unknown>;
       return this._mapProduct(body);
