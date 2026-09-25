@@ -486,6 +486,31 @@ export type UpdateBlogPostParams = Partial<CreateBlogPostParams>;
 
 // ─── Custom pages ──────────────────────────────────────────────────────────────
 
+/**
+ * The API answers in snake_case; CustomPage is camelCase.
+ *
+ * Both readers used to CAST the raw body instead of mapping it, so
+ * `isPublished` was always undefined — and `/p/[slug]` refuses to render a
+ * page that is not published. Every custom page on every storefront 404'd,
+ * however carefully a merchant wrote it. Same mismatch as _mapProduct and
+ * listLocations; this is the third reader it has caught out.
+ */
+function _mapCustomPage(raw: Record<string, unknown>): CustomPage {
+  return {
+    id:             (raw.id as string) ?? '',
+    slug:           (raw.slug as string) ?? '',
+    title:          (raw.title as string) ?? '',
+    body:           (raw.body as string) ?? '',
+    isPublished:    (raw.is_published as boolean) ?? false,
+    seoTitle:       (raw.seo_title as string | null) ?? null,
+    seoDescription: (raw.seo_description as string | null) ?? null,
+    showInNav:      (raw.show_in_nav as boolean) ?? false,
+    showInFooter:   (raw.show_in_footer as boolean) ?? false,
+    createdAt:      (raw.created_at as string) ?? '',
+    updatedAt:      (raw.updated_at as string) ?? '',
+  };
+}
+
 export interface CustomPage {
   id: string;
   slug: string;
@@ -1910,7 +1935,7 @@ export class OrderingClient {
   // ── Custom pages ──────────────────────────────────────────────────────────
 
   async listCustomPages(opts: { isPublished?: boolean } = {}): Promise<OrderingListResponse<CustomPage>> {
-    return this.callList<CustomPage>(
+    const res = await this.callList<Record<string, unknown>>(
       {
         method: 'GET',
         path: '/v1/pos/pages',
@@ -1918,14 +1943,16 @@ export class OrderingClient {
       },
       'pages',
     );
+    return { ...res, data: res.data.map(_mapCustomPage) };
   }
 
   async getCustomPage(slug: string): Promise<CustomPage | null> {
     try {
-      const raw = await this.call<{ page?: CustomPage } | CustomPage>(
+      const raw = await this.call<Record<string, unknown>>(
         { method: 'GET', path: `/v1/pos/pages/${encodeURIComponent(slug)}` },
       );
-      return ('page' in raw && raw.page) ? raw.page : raw as CustomPage;
+      const body = (raw.page ?? raw) as Record<string, unknown>;
+      return _mapCustomPage(body);
     } catch {
       return null;
     }
