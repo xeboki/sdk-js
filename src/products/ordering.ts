@@ -361,6 +361,22 @@ export interface FulfillmentLocation {
   maxDays: number;
 }
 
+/** One promise in the reassurance band under the hero. */
+export interface TrustItem {
+  /** A name from the storefront's icon set; unknown names fall back. */
+  icon: string;
+  title: string;
+  body: string;
+}
+
+/**
+ * Which bands the home page draws.
+ *
+ * A missing key means SHOWN. A storefront configured before this existed has
+ * an empty map, and it must not lose half its page as a result.
+ */
+export type StorefrontSections = Record<string, boolean>;
+
 export interface StorefrontConfig {
   storefrontSlug: string | null;
   isPublished: boolean;
@@ -380,6 +396,12 @@ export interface StorefrontConfig {
   featuredCategoryIds: string[];
   featuredProductIds: string[];
   announcementBar: string | null;
+  /** Band visibility. Absent key = shown. */
+  sections: StorefrontSections;
+  /** Overrides the preset's hero treatment: banner | split | minimal. */
+  heroStyle: string;
+  /** Empty = the storefront's own, derived from the merchant's shipping rules. */
+  trustItems: TrustItem[];
   seoTitle: string;
   seoDescription: string;
   /** Title template used on inner pages — %s is replaced by page title. Default: '%s | {businessName}' */
@@ -442,6 +464,9 @@ export interface UpdateStorefrontConfigParams {
   featuredCategoryIds?: string[];
   featuredProductIds?: string[];
   announcementBar?: string;
+  sections?: StorefrontSections;
+  heroStyle?: string;
+  trustItems?: TrustItem[];
   seoTitle?: string;
   seoDescription?: string;
   seoTitleTemplate?: string;
@@ -1466,6 +1491,9 @@ export class OrderingClient {
       featuredCategoryIds:     (raw['featured_category_ids'] as string[]) ?? [],
       featuredProductIds:      (raw['featured_product_ids'] as string[]) ?? [],
       announcementBar:         (raw['announcement_bar'] as string | null) ?? null,
+      sections:                (raw['sections'] as StorefrontSections) ?? {},
+      heroStyle:               (raw['hero_style'] as string) ?? '',
+      trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       seoTitle:                (raw['seo_title'] as string) ?? '',
       seoDescription:          (raw['seo_description'] as string) ?? '',
       seoTitleTemplate:        (raw['seo_title_template'] as string | null) ?? null,
@@ -1531,6 +1559,9 @@ export class OrderingClient {
         ...(params.featuredCategoryIds !== undefined && { featured_category_ids: params.featuredCategoryIds }),
         ...(params.featuredProductIds !== undefined && { featured_product_ids: params.featuredProductIds }),
         ...(params.announcementBar !== undefined && { announcement_bar: params.announcementBar }),
+        ...(params.sections !== undefined && { sections: params.sections }),
+        ...(params.heroStyle !== undefined && { hero_style: params.heroStyle }),
+        ...(params.trustItems !== undefined && { trust_items: params.trustItems }),
         ...(params.seoTitle !== undefined && { seo_title: params.seoTitle }),
         ...(params.seoDescription !== undefined && { seo_description: params.seoDescription }),
         ...(params.seoTitleTemplate !== undefined && { seo_title_template: params.seoTitleTemplate }),
