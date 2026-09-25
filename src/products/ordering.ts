@@ -370,6 +370,59 @@ export interface TrustItem {
 }
 
 /**
+ * The words over one band of the home page.
+ *
+ * Every field is optional and a blank one keeps the storefront's own wording,
+ * so retitling the featured band does not force a merchant to re-type the
+ * eyebrow and the line under it.
+ */
+export interface SectionCopy {
+  eyebrow?: string;
+  title?: string;
+  lede?: string;
+  linkLabel?: string;
+}
+
+/** Per-band wording, keyed by the same section ids `sections` uses. */
+export type StorefrontSectionCopy = Record<string, SectionCopy>;
+
+/**
+ * `section_copy` both ways.
+ *
+ * Cast, not mapped, is the recurring bug in this file: it survives review for
+ * every field whose two spellings happen to match, and `link_label` is not one
+ * of them — a cast would have left every "View all" override silently dropped.
+ */
+function mapSectionCopy(raw: unknown): StorefrontSectionCopy {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: StorefrontSectionCopy = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue;
+    const v = value as Record<string, unknown>;
+    out[key] = {
+      eyebrow:   (v['eyebrow'] as string) ?? '',
+      title:     (v['title'] as string) ?? '',
+      lede:      (v['lede'] as string) ?? '',
+      linkLabel: (v['link_label'] as string) ?? '',
+    };
+  }
+  return out;
+}
+
+function unmapSectionCopy(copy: StorefrontSectionCopy): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(copy)) {
+    out[key] = {
+      eyebrow:    value.eyebrow ?? '',
+      title:      value.title ?? '',
+      lede:       value.lede ?? '',
+      link_label: value.linkLabel ?? '',
+    };
+  }
+  return out;
+}
+
+/**
  * Which bands the home page draws.
  *
  * A missing key means SHOWN. A storefront configured before this existed has
@@ -402,6 +455,8 @@ export interface StorefrontConfig {
   heroStyle: string;
   /** Empty = the storefront's own, derived from the merchant's shipping rules. */
   trustItems: TrustItem[];
+  /** Per-band wording. A blank field falls back to the storefront's own. */
+  sectionCopy: StorefrontSectionCopy;
   seoTitle: string;
   seoDescription: string;
   /** Title template used on inner pages — %s is replaced by page title. Default: '%s | {businessName}' */
@@ -467,6 +522,7 @@ export interface UpdateStorefrontConfigParams {
   sections?: StorefrontSections;
   heroStyle?: string;
   trustItems?: TrustItem[];
+  sectionCopy?: StorefrontSectionCopy;
   seoTitle?: string;
   seoDescription?: string;
   seoTitleTemplate?: string;
@@ -1494,6 +1550,7 @@ export class OrderingClient {
       sections:                (raw['sections'] as StorefrontSections) ?? {},
       heroStyle:               (raw['hero_style'] as string) ?? '',
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
+      sectionCopy:             mapSectionCopy(raw['section_copy']),
       seoTitle:                (raw['seo_title'] as string) ?? '',
       seoDescription:          (raw['seo_description'] as string) ?? '',
       seoTitleTemplate:        (raw['seo_title_template'] as string | null) ?? null,
@@ -1562,6 +1619,7 @@ export class OrderingClient {
         ...(params.sections !== undefined && { sections: params.sections }),
         ...(params.heroStyle !== undefined && { hero_style: params.heroStyle }),
         ...(params.trustItems !== undefined && { trust_items: params.trustItems }),
+        ...(params.sectionCopy !== undefined && { section_copy: unmapSectionCopy(params.sectionCopy) }),
         ...(params.seoTitle !== undefined && { seo_title: params.seoTitle }),
         ...(params.seoDescription !== undefined && { seo_description: params.seoDescription }),
         ...(params.seoTitleTemplate !== undefined && { seo_title_template: params.seoTitleTemplate }),
