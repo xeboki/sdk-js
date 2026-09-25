@@ -288,7 +288,13 @@ export interface StorePaymentMethod {
 
 export interface StoreConfig {
   businessType: string;
+  /**
+   * The name typed at signup. Often a legal or mistyped form — prefer
+   * `displayName` on anything a customer sees.
+   */
   businessName: string;
+  /** The name a customer should be shown. Empty when never set. */
+  displayName: string;
   currencyCode: string;
   currencySymbol: string;
   timezone: string;
@@ -1421,6 +1427,7 @@ export class OrderingClient {
     return {
       businessType:   raw['business_type'] as string,
       businessName:   raw['business_name'] as string,
+      displayName:    (raw['display_name'] as string) ?? '',
       currencyCode:   raw['currency_code'] as string,
       currencySymbol: raw['currency_symbol'] as string,
       timezone:       raw['timezone'] as string,
