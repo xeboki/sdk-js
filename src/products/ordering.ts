@@ -325,6 +325,13 @@ export interface FooterColumn {
  * local tax. A city no branch serves falls back to the store-level defaults.
  */
 export interface FulfillmentLocation {
+  /**
+   * Whether the merchant switched this branch on for online ordering. The
+   * delivery/pickup flags describe HOW it would fulfil; this says whether it
+   * is on the webshop at all. A storefront must not offer a branch that is
+   * false here.
+   */
+  orderingEnabled: boolean;
   locationId: string;
   locationName: string;
   /** The branch's own city. */
@@ -1457,6 +1464,7 @@ export class OrderingClient {
           deliveryRadiusKm:      (l['delivery_radius_km'] as number) ?? 0,
           minOrder:              (l['min_order'] as number) ?? 0,
           servedCities:          (l['served_cities'] as string[]) ?? [],
+          orderingEnabled:       (l['ordering_enabled'] as boolean) ?? true,
           pickupEnabled:         (l['pickup_enabled'] as boolean) ?? true,
           pickupAddress:         (l['pickup_address'] as string) ?? '',
           pickupInstructions:    (l['pickup_instructions'] as string) ?? '',
