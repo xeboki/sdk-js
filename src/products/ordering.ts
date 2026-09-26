@@ -387,6 +387,29 @@ export interface SectionCopy {
 export type StorefrontSectionCopy = Record<string, SectionCopy>;
 
 /**
+ * How the shop's header is put together.
+ *
+ * Named variants rather than free measurements: a merchant who can set
+ * anything can build a header with nothing in it. The API fills every field,
+ * falling back on anything it does not recognise, so this is never partial.
+ */
+export interface HeaderSettings {
+  /** full | compact | icon | off */
+  search: string;
+  showCurrency: boolean;
+  showLanguage: boolean;
+  showLocation: boolean;
+  showAccount: boolean;
+  showWishlist: boolean;
+  showCart: boolean;
+  /** all | featured | off */
+  categoryRail: string;
+  /** Departments kept out of the rail without deactivating them. */
+  hiddenCategoryIds: string[];
+  sticky: boolean;
+}
+
+/**
  * `section_copy` both ways.
  *
  * Cast, not mapped, is the recurring bug in this file: it survives review for
@@ -406,6 +429,46 @@ function mapSectionCopy(raw: unknown): StorefrontSectionCopy {
       linkLabel: (v['link_label'] as string) ?? '',
     };
   }
+  return out;
+}
+
+/**
+ * `header_settings` both ways.
+ *
+ * Mapped field by field for the same reason `section_copy` is: `show_currency`
+ * is not `showCurrency`, and a cast would leave every one of these reading
+ * undefined — which is falsy, so a header would quietly lose its cart.
+ */
+function mapHeaderSettings(raw: unknown): HeaderSettings {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const bool = (key: string, fallback: boolean) =>
+    typeof v[key] === 'boolean' ? (v[key] as boolean) : fallback;
+  return {
+    search:            (v['search'] as string) || 'full',
+    showCurrency:      bool('show_currency', false),
+    showLanguage:      bool('show_language', true),
+    showLocation:      bool('show_location', true),
+    showAccount:       bool('show_account', true),
+    showWishlist:      bool('show_wishlist', true),
+    showCart:          bool('show_cart', true),
+    categoryRail:      (v['category_rail'] as string) || 'all',
+    hiddenCategoryIds: (v['hidden_category_ids'] as string[]) ?? [],
+    sticky:            bool('sticky', true),
+  };
+}
+
+function unmapHeaderSettings(settings: Partial<HeaderSettings>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (settings.search !== undefined) out['search'] = settings.search;
+  if (settings.showCurrency !== undefined) out['show_currency'] = settings.showCurrency;
+  if (settings.showLanguage !== undefined) out['show_language'] = settings.showLanguage;
+  if (settings.showLocation !== undefined) out['show_location'] = settings.showLocation;
+  if (settings.showAccount !== undefined) out['show_account'] = settings.showAccount;
+  if (settings.showWishlist !== undefined) out['show_wishlist'] = settings.showWishlist;
+  if (settings.showCart !== undefined) out['show_cart'] = settings.showCart;
+  if (settings.categoryRail !== undefined) out['category_rail'] = settings.categoryRail;
+  if (settings.hiddenCategoryIds !== undefined) out['hidden_category_ids'] = settings.hiddenCategoryIds;
+  if (settings.sticky !== undefined) out['sticky'] = settings.sticky;
   return out;
 }
 
@@ -470,6 +533,7 @@ export interface StorefrontConfig {
   trustItems: TrustItem[];
   /** Per-band wording. A blank field falls back to the storefront's own. */
   sectionCopy: StorefrontSectionCopy;
+  headerSettings: HeaderSettings;
   /** A line under the store name in the footer. Empty = none. */
   footerTagline: string;
   footerShowSocial: boolean;
@@ -544,6 +608,7 @@ export interface UpdateStorefrontConfigParams {
   heroStyle?: string;
   trustItems?: TrustItem[];
   sectionCopy?: StorefrontSectionCopy;
+  headerSettings?: Partial<HeaderSettings>;
   backgroundColor?: string;
   backgroundCustom?: boolean;
   footerTagline?: string;
@@ -1583,6 +1648,7 @@ export class OrderingClient {
       heroStyle:               (raw['hero_style'] as string) ?? '',
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
+      headerSettings:          mapHeaderSettings(raw['header_settings']),
       footerTagline:           (raw['footer_tagline'] as string) ?? '',
       footerShowSocial:        (raw['footer_show_social'] as boolean) ?? true,
       footerShowAddress:       (raw['footer_show_address'] as boolean) ?? true,
@@ -1661,6 +1727,7 @@ export class OrderingClient {
         ...(params.heroStyle !== undefined && { hero_style: params.heroStyle }),
         ...(params.trustItems !== undefined && { trust_items: params.trustItems }),
         ...(params.sectionCopy !== undefined && { section_copy: unmapSectionCopy(params.sectionCopy) }),
+        ...(params.headerSettings !== undefined && { header_settings: unmapHeaderSettings(params.headerSettings) }),
         ...(params.footerTagline !== undefined && { footer_tagline: params.footerTagline }),
         ...(params.footerShowSocial !== undefined && { footer_show_social: params.footerShowSocial }),
         ...(params.footerShowAddress !== undefined && { footer_show_address: params.footerShowAddress }),
