@@ -394,8 +394,14 @@ export type StorefrontSectionCopy = Record<string, SectionCopy>;
  * falling back on anything it does not recognise, so this is never partial.
  */
 export interface HeaderSettings {
-  /** full | compact | icon | off */
+  /** on | off — whether the header carries search at all. */
   search: string;
+  /** left | centre | right. Moot when the width is 'fill'. */
+  searchPlacement: string;
+  /** fill | small | medium | large. Named sizes, never measurements. */
+  searchWidth: string;
+  /** open = always a field | tap = an icon that opens into its space. */
+  searchBehaviour: string;
   showCurrency: boolean;
   showLanguage: boolean;
   showLocation: boolean;
@@ -444,7 +450,10 @@ function mapHeaderSettings(raw: unknown): HeaderSettings {
   const bool = (key: string, fallback: boolean) =>
     typeof v[key] === 'boolean' ? (v[key] as boolean) : fallback;
   return {
-    search:            (v['search'] as string) || 'full',
+    search:            (v['search'] as string) || 'on',
+    searchPlacement:   (v['search_placement'] as string) || 'centre',
+    searchWidth:       (v['search_width'] as string) || 'fill',
+    searchBehaviour:   (v['search_behaviour'] as string) || 'open',
     showCurrency:      bool('show_currency', false),
     showLanguage:      bool('show_language', true),
     showLocation:      bool('show_location', true),
@@ -460,6 +469,9 @@ function mapHeaderSettings(raw: unknown): HeaderSettings {
 function unmapHeaderSettings(settings: Partial<HeaderSettings>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (settings.search !== undefined) out['search'] = settings.search;
+  if (settings.searchPlacement !== undefined) out['search_placement'] = settings.searchPlacement;
+  if (settings.searchWidth !== undefined) out['search_width'] = settings.searchWidth;
+  if (settings.searchBehaviour !== undefined) out['search_behaviour'] = settings.searchBehaviour;
   if (settings.showCurrency !== undefined) out['show_currency'] = settings.showCurrency;
   if (settings.showLanguage !== undefined) out['show_language'] = settings.showLanguage;
   if (settings.showLocation !== undefined) out['show_location'] = settings.showLocation;
