@@ -140,6 +140,8 @@ export type {
   StoreConfig,
   StorePaymentMethod,
   StorefrontConfig,
+  HeroSlide,
+  HeroSlideshow,
   FulfillmentLocation,
   UpdateStorefrontConfigParams,
   StripePaymentIntent,

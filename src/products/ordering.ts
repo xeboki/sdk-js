@@ -445,6 +445,148 @@ function mapSectionCopy(raw: unknown): StorefrontSectionCopy {
  * is not `showCurrency`, and a cast would leave every one of these reading
  * undefined — which is falsy, so a header would quietly lose its cart.
  */
+/**
+ * One banner in the slideshow.
+ *
+ * Every field is present on every slide — a component reading `slide.eyebrow`
+ * must not get `undefined` on the slide where the merchant left it blank.
+ */
+export interface HeroSlide {
+  /** Stable across reorders. The storefront keys its list on this; keyed on
+   *  array position, a shopper's place moves when a slide above is deleted. */
+  id: string;
+  imageUrl: string;
+  eyebrow: string;
+  title: string;
+  /** 'normal' | 'large' | 'xlarge' — Shopify's heading_size. */
+  titleSize: string;
+  subtitle: string;
+  ctaText: string;
+  ctaUrl: string;
+  secondaryCtaText: string;
+  secondaryCtaUrl: string;
+  /** 'left' | 'centre' | 'right' */
+  align: string;
+  /** 'top' | 'middle' | 'bottom' */
+  vertical: string;
+  /** The phone's own alignment; defaults to `align`. */
+  alignMobile: string;
+  /** 'none' | 'light' | 'medium' | 'heavy' — the scrim under the copy. */
+  overlay: string;
+  /** ISO 8601, or '' for always. A sale banner that takes itself down. */
+  startsAt: string;
+  endsAt: string;
+}
+
+/** How the banners are composed and how the shop moves between them. */
+export interface HeroSlideshow {
+  /** 'full' | 'split' | 'minimal' | 'carousel' */
+  layout: string;
+  /** 'slide' | 'fade' | 'carousel' */
+  transition: string;
+  /** 'none' | 'ambient' — what the picture does while a slide is up. */
+  imageMotion: string;
+  /** 'off' | 'slow' | 'normal' | 'fast' (9/5/3 seconds). */
+  interval: string;
+  /** 'dots' | 'counter' | 'numbers' | 'none' */
+  indicator: string;
+  arrows: boolean;
+  /** 'adapt' | 'short' | 'medium' | 'tall' */
+  height: string;
+  /** 'over' | 'below' — where the copy sits on a phone. */
+  mobileText: string;
+  pauseOnHover: boolean;
+  loop: boolean;
+  /** The server's cap, carried so the back office keeps no copy of it. */
+  maxSlides: number;
+}
+
+function mapHeroSlide(raw: unknown): HeroSlide {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const str = (key: string, fallback = '') => (v[key] as string) ?? fallback;
+  const align = str('align', 'left');
+  return {
+    id:               str('id'),
+    imageUrl:         str('image_url'),
+    eyebrow:          str('eyebrow'),
+    title:            str('title'),
+    titleSize:        str('title_size', 'large'),
+    subtitle:         str('subtitle'),
+    ctaText:          str('cta_text'),
+    ctaUrl:           str('cta_url'),
+    secondaryCtaText: str('secondary_cta_text'),
+    secondaryCtaUrl:  str('secondary_cta_url'),
+    align,
+    vertical:         str('vertical', 'middle'),
+    alignMobile:      str('align_mobile', align),
+    overlay:          str('overlay', 'medium'),
+    startsAt:         str('starts_at'),
+    endsAt:           str('ends_at'),
+  };
+}
+
+function unmapHeroSlide(slide: Partial<HeroSlide>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const put = (key: string, value: unknown) => {
+    if (value !== undefined) out[key] = value;
+  };
+  put('id', slide.id);
+  put('image_url', slide.imageUrl);
+  put('eyebrow', slide.eyebrow);
+  put('title', slide.title);
+  put('title_size', slide.titleSize);
+  put('subtitle', slide.subtitle);
+  put('cta_text', slide.ctaText);
+  put('cta_url', slide.ctaUrl);
+  put('secondary_cta_text', slide.secondaryCtaText);
+  put('secondary_cta_url', slide.secondaryCtaUrl);
+  put('align', slide.align);
+  put('vertical', slide.vertical);
+  put('align_mobile', slide.alignMobile);
+  put('overlay', slide.overlay);
+  put('starts_at', slide.startsAt);
+  put('ends_at', slide.endsAt);
+  return out;
+}
+
+function mapHeroSlideshow(raw: unknown): HeroSlideshow {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const bool = (key: string, fallback: boolean) =>
+    typeof v[key] === 'boolean' ? (v[key] as boolean) : fallback;
+  return {
+    layout:       (v['layout'] as string) || 'full',
+    transition:   (v['transition'] as string) || 'slide',
+    imageMotion:  (v['image_motion'] as string) || 'none',
+    interval:     (v['interval'] as string) || 'normal',
+    indicator:    (v['indicator'] as string) || 'dots',
+    arrows:       bool('arrows', true),
+    height:       (v['height'] as string) || 'adapt',
+    mobileText:   (v['mobile_text'] as string) || 'over',
+    pauseOnHover: bool('pause_on_hover', true),
+    loop:         bool('loop', true),
+    maxSlides:    typeof v['max_slides'] === 'number' ? (v['max_slides'] as number) : 8,
+  };
+}
+
+function unmapHeroSlideshow(s: Partial<HeroSlideshow>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const put = (key: string, value: unknown) => {
+    if (value !== undefined) out[key] = value;
+  };
+  put('layout', s.layout);
+  put('transition', s.transition);
+  put('image_motion', s.imageMotion);
+  put('interval', s.interval);
+  put('indicator', s.indicator);
+  put('arrows', s.arrows);
+  put('height', s.height);
+  put('mobile_text', s.mobileText);
+  put('pause_on_hover', s.pauseOnHover);
+  put('loop', s.loop);
+  // max_slides is the server's, never sent back.
+  return out;
+}
+
 function mapHeaderSettings(raw: unknown): HeaderSettings {
   const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const bool = (key: string, fallback: boolean) =>
@@ -541,6 +683,10 @@ export interface StorefrontConfig {
   sections: StorefrontSections;
   /** Overrides the preset's hero treatment: banner | split | minimal. */
   heroStyle: string;
+  /** The banner module. EMPTY means this shop composes one banner from the
+   *  `hero*` fields above, which is what every shop predating it does. */
+  heroSlides: HeroSlide[];
+  heroSlideshow: HeroSlideshow;
   /** Empty = the storefront's own, derived from the merchant's shipping rules. */
   trustItems: TrustItem[];
   /** Per-band wording. A blank field falls back to the storefront's own. */
@@ -618,6 +764,9 @@ export interface UpdateStorefrontConfigParams {
   announcementBar?: string;
   sections?: StorefrontSections;
   heroStyle?: string;
+  /** A list is replaced wholesale, so send every slide to be kept. */
+  heroSlides?: Partial<HeroSlide>[];
+  heroSlideshow?: Partial<HeroSlideshow>;
   trustItems?: TrustItem[];
   sectionCopy?: StorefrontSectionCopy;
   headerSettings?: Partial<HeaderSettings>;
@@ -1658,6 +1807,8 @@ export class OrderingClient {
       announcementBar:         (raw['announcement_bar'] as string | null) ?? null,
       sections:                (raw['sections'] as StorefrontSections) ?? {},
       heroStyle:               (raw['hero_style'] as string) ?? '',
+      heroSlides:              ((raw['hero_slides'] as unknown[]) ?? []).map(mapHeroSlide),
+      heroSlideshow:           mapHeroSlideshow(raw['hero_slideshow']),
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
       headerSettings:          mapHeaderSettings(raw['header_settings']),
@@ -1737,6 +1888,12 @@ export class OrderingClient {
         ...(params.announcementBar !== undefined && { announcement_bar: params.announcementBar }),
         ...(params.sections !== undefined && { sections: params.sections }),
         ...(params.heroStyle !== undefined && { hero_style: params.heroStyle }),
+        ...(params.heroSlides !== undefined && {
+          hero_slides: params.heroSlides.map(unmapHeroSlide),
+        }),
+        ...(params.heroSlideshow !== undefined && {
+          hero_slideshow: unmapHeroSlideshow(params.heroSlideshow),
+        }),
         ...(params.trustItems !== undefined && { trust_items: params.trustItems }),
         ...(params.sectionCopy !== undefined && { section_copy: unmapSectionCopy(params.sectionCopy) }),
         ...(params.headerSettings !== undefined && { header_settings: unmapHeaderSettings(params.headerSettings) }),
