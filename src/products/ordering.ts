@@ -530,6 +530,54 @@ function mapBannerOptions(raw: unknown): BannerOptions {
   return out;
 }
 
+/** The moving band above the header, and what a merchant decided about it. */
+export interface Announcement {
+  /** False when it is switched off, or when there is nothing to say. */
+  enabled: boolean;
+  text: string;
+  /** `#rrggbb`, or empty for the shop's own brand colour. */
+  background: string;
+  /** Dark words, for a pale background a merchant chose. */
+  darkText: boolean;
+}
+
+function mapAnnouncement(raw: unknown): Announcement {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return {
+    // Absent means shown: every shop with a band today predates these
+    // settings, and reading this must not silently remove it.
+    enabled: v['enabled'] !== false,
+    text: (v['text'] as string) ?? '',
+    background: (v['background'] as string) ?? '',
+    darkText: v['dark_text'] === true,
+  };
+}
+
+/** The notice a shop shows a first-time visitor. */
+export interface PromoPopup {
+  /** False unless the merchant switched it on AND gave it words to say. */
+  enabled: boolean;
+  title: string;
+  message: string;
+  /** Seconds after the page settles. The server clamps this. */
+  delaySeconds: number;
+  /** Once a visit, rather than on every page they open. */
+  oncePerSession: boolean;
+}
+
+function mapPromoPopup(raw: unknown): PromoPopup {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return {
+    // A shop whose owner never opened that screen must not start interrupting
+    // its visitors, so anything unreadable means off.
+    enabled: v['enabled'] === true,
+    title: (v['title'] as string) ?? '',
+    message: (v['message'] as string) ?? '',
+    delaySeconds: typeof v['delay_seconds'] === 'number' ? (v['delay_seconds'] as number) : 3,
+    oncePerSession: v['once_per_session'] !== false,
+  };
+}
+
 function mapHeroSlide(raw: unknown): HeroSlide {
   const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const str = (key: string, fallback = '') => (v[key] as string) ?? fallback;
@@ -718,6 +766,10 @@ export interface StorefrontConfig {
   heroSlideshow: HeroSlideshow;
   /** What a banner may be set to, per axis. The server's list, never a copy. */
   bannerOptions: BannerOptions;
+  /** The notice shown to a first-time visitor. */
+  promoPopup: PromoPopup;
+  /** The moving band above the header. */
+  announcement: Announcement;
   /** Empty = the storefront's own, derived from the merchant's shipping rules. */
   trustItems: TrustItem[];
   /** Per-band wording. A blank field falls back to the storefront's own. */
@@ -1841,6 +1893,8 @@ export class OrderingClient {
       heroSlides:              ((raw['hero_slides'] as unknown[]) ?? []).map(mapHeroSlide),
       heroSlideshow:           mapHeroSlideshow(raw['hero_slideshow']),
       bannerOptions:           mapBannerOptions(raw['banner_options']),
+      promoPopup:              mapPromoPopup(raw['promo_popup']),
+      announcement:            mapAnnouncement(raw['announcement']),
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
       headerSettings:          mapHeaderSettings(raw['header_settings']),
