@@ -415,6 +415,15 @@ export interface HeaderSettings {
   /** Departments kept out of the rail without deactivating them. */
   hiddenCategoryIds: string[];
   /**
+   * Where the shop's mark sits, and what the menu does around it.
+   * left | centred | stacked | split. Dawn's `logo_position`.
+   */
+  logoPosition: string;
+  /** normal | upper — whether the department names shout. */
+  linkCase: string;
+  /** The hairline under the bar. */
+  showBorder: boolean;
+  /**
    * How the departments are presented on a wide screen.
    * rail = a scrolling row under the bar | inline = in the bar itself |
    * mega = one panel behind a trigger | drawer = a side panel.
@@ -788,6 +797,9 @@ function mapHeaderSettings(raw: unknown): HeaderSettings {
     showCart:          bool('show_cart', true),
     categoryRail:      (v['category_rail'] as string) || 'all',
     hiddenCategoryIds: (v['hidden_category_ids'] as string[]) ?? [],
+    logoPosition:      (v['logo_position'] as string) || 'left',
+    linkCase:          (v['link_case'] as string) || 'upper',
+    showBorder:        bool('show_border', true),
     menu:              (v['menu'] as string) || 'rail',
     mobileMenu:        (v['mobile_menu'] as string) || 'sheet',
     // `scroll` replaced the `sticky` switch. The API reads a stored `sticky`
@@ -811,6 +823,9 @@ function unmapHeaderSettings(settings: Partial<HeaderSettings>): Record<string, 
   if (settings.showCart !== undefined) out['show_cart'] = settings.showCart;
   if (settings.categoryRail !== undefined) out['category_rail'] = settings.categoryRail;
   if (settings.hiddenCategoryIds !== undefined) out['hidden_category_ids'] = settings.hiddenCategoryIds;
+  if (settings.logoPosition !== undefined) out['logo_position'] = settings.logoPosition;
+  if (settings.linkCase !== undefined) out['link_case'] = settings.linkCase;
+  if (settings.showBorder !== undefined) out['show_border'] = settings.showBorder;
   if (settings.menu !== undefined) out['menu'] = settings.menu;
   if (settings.mobileMenu !== undefined) out['mobile_menu'] = settings.mobileMenu;
   if (settings.scroll !== undefined) out['scroll'] = settings.scroll;
