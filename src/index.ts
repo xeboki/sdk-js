@@ -146,6 +146,7 @@ export type {
   BannerOptions,
   PromoPopup,
   Announcement,
+  CheckoutSettings,
   FulfillmentLocation,
   UpdateStorefrontConfigParams,
   StripePaymentIntent,

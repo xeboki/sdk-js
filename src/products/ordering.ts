@@ -530,6 +530,43 @@ function mapBannerOptions(raw: unknown): BannerOptions {
   return out;
 }
 
+/** What a shop asks a shopper for at checkout. */
+export interface CheckoutSettings {
+  /** 'guest' | 'optional' | 'required' */
+  accountMode: string;
+  requirePhone: boolean;
+  requireCompany: boolean;
+  requireVat: boolean;
+  requireDob: boolean;
+  allowNotes: boolean;
+  /** False unless there is also something to read. */
+  showTerms: boolean;
+  termsUrl: string;
+  thankYouMessage: string;
+  showTracking: boolean;
+  showSocialShare: boolean;
+}
+
+function mapCheckout(raw: unknown): CheckoutSettings {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const bool = (key: string, fallback: boolean) =>
+    typeof v[key] === 'boolean' ? (v[key] as boolean) : fallback;
+  return {
+    accountMode: (v['account_mode'] as string) || 'optional',
+    requirePhone: bool('require_phone', false),
+    requireCompany: bool('require_company', false),
+    requireVat: bool('require_vat', false),
+    requireDob: bool('require_dob', false),
+    // The notes box and the tracking link exist today, so absent means on.
+    allowNotes: bool('allow_notes', true),
+    showTerms: bool('show_terms', false),
+    termsUrl: (v['terms_url'] as string) || '',
+    thankYouMessage: (v['thank_you_message'] as string) || '',
+    showTracking: bool('show_tracking', true),
+    showSocialShare: bool('show_social_share', false),
+  };
+}
+
 /** The moving band above the header, and what a merchant decided about it. */
 export interface Announcement {
   /** False when it is switched off, or when there is nothing to say. */
@@ -786,6 +823,8 @@ export interface StorefrontConfig {
    * a switch, because a stale tab still orders.
    */
   acceptOnlineOrders: boolean;
+  /** What the shop asks for at checkout. */
+  checkout: CheckoutSettings;
   /** Empty = the storefront's own, derived from the merchant's shipping rules. */
   trustItems: TrustItem[];
   /** Per-band wording. A blank field falls back to the storefront's own. */
@@ -1917,6 +1956,7 @@ export class OrderingClient {
       stateColors:             (raw['state_colors'] as Record<string, string>) ?? {},
       typography:              (raw['typography'] as Record<string, string>) ?? {},
       acceptOnlineOrders:      raw['accept_online_orders'] !== false,
+      checkout:                mapCheckout(raw['checkout']),
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
       headerSettings:          mapHeaderSettings(raw['header_settings']),
