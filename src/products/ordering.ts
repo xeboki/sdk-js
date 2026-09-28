@@ -770,6 +770,11 @@ export interface StorefrontConfig {
   promoPopup: PromoPopup;
   /** The moving band above the header. */
   announcement: Announcement;
+  /**
+   * What a shop says that is not its brand — success, warning, danger, info.
+   * Absent means the conventional green, amber, red and blue.
+   */
+  stateColors: Record<string, string>;
   /** Empty = the storefront's own, derived from the merchant's shipping rules. */
   trustItems: TrustItem[];
   /** Per-band wording. A blank field falls back to the storefront's own. */
@@ -850,6 +855,7 @@ export interface UpdateStorefrontConfigParams {
   /** A list is replaced wholesale, so send every slide to be kept. */
   heroSlides?: Partial<HeroSlide>[];
   heroSlideshow?: Partial<HeroSlideshow>;
+  stateColors?: Record<string, string>;
   trustItems?: TrustItem[];
   sectionCopy?: StorefrontSectionCopy;
   headerSettings?: Partial<HeaderSettings>;
@@ -1895,6 +1901,7 @@ export class OrderingClient {
       bannerOptions:           mapBannerOptions(raw['banner_options']),
       promoPopup:              mapPromoPopup(raw['promo_popup']),
       announcement:            mapAnnouncement(raw['announcement']),
+      stateColors:             (raw['state_colors'] as Record<string, string>) ?? {},
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
       headerSettings:          mapHeaderSettings(raw['header_settings']),
