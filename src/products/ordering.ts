@@ -775,6 +775,11 @@ export interface StorefrontConfig {
    * Absent means the conventional green, amber, red and blue.
    */
   stateColors: Record<string, string>;
+  /**
+   * How the type is set — a scale, a base size, a heading weight, a tracking,
+   * and whether labels are uppercase. Relationships, never pixel boxes.
+   */
+  typography: Record<string, string>;
   /** Empty = the storefront's own, derived from the merchant's shipping rules. */
   trustItems: TrustItem[];
   /** Per-band wording. A blank field falls back to the storefront's own. */
@@ -856,6 +861,7 @@ export interface UpdateStorefrontConfigParams {
   heroSlides?: Partial<HeroSlide>[];
   heroSlideshow?: Partial<HeroSlideshow>;
   stateColors?: Record<string, string>;
+  typography?: Record<string, string>;
   trustItems?: TrustItem[];
   sectionCopy?: StorefrontSectionCopy;
   headerSettings?: Partial<HeaderSettings>;
@@ -1902,6 +1908,7 @@ export class OrderingClient {
       promoPopup:              mapPromoPopup(raw['promo_popup']),
       announcement:            mapAnnouncement(raw['announcement']),
       stateColors:             (raw['state_colors'] as Record<string, string>) ?? {},
+      typography:              (raw['typography'] as Record<string, string>) ?? {},
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
       headerSettings:          mapHeaderSettings(raw['header_settings']),
