@@ -501,6 +501,35 @@ export interface HeroSlideshow {
   maxSlides: number;
 }
 
+/** One choice a merchant can make, as the server words it. */
+export interface BannerOption {
+  key: string;
+  label: string;
+}
+
+/**
+ * Every banner option, per axis, in the order the server lists them.
+ *
+ * Served rather than kept in a client: a style added on the server reaches the
+ * back office without a release, and no client can offer a name the server
+ * would refuse.
+ */
+export type BannerOptions = Record<string, BannerOption[]>;
+
+function mapBannerOptions(raw: unknown): BannerOptions {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: BannerOptions = {};
+  for (const [axis, options] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(options)) continue;
+    const mapped = options
+      .filter((o): o is Record<string, unknown> => Boolean(o) && typeof o === 'object')
+      .map((o) => ({ key: String(o['key'] ?? ''), label: String(o['label'] ?? o['key'] ?? '') }))
+      .filter((o) => o.key);
+    if (mapped.length) out[axis] = mapped;
+  }
+  return out;
+}
+
 function mapHeroSlide(raw: unknown): HeroSlide {
   const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const str = (key: string, fallback = '') => (v[key] as string) ?? fallback;
@@ -687,6 +716,8 @@ export interface StorefrontConfig {
    *  `hero*` fields above, which is what every shop predating it does. */
   heroSlides: HeroSlide[];
   heroSlideshow: HeroSlideshow;
+  /** What a banner may be set to, per axis. The server's list, never a copy. */
+  bannerOptions: BannerOptions;
   /** Empty = the storefront's own, derived from the merchant's shipping rules. */
   trustItems: TrustItem[];
   /** Per-band wording. A blank field falls back to the storefront's own. */
@@ -1809,6 +1840,7 @@ export class OrderingClient {
       heroStyle:               (raw['hero_style'] as string) ?? '',
       heroSlides:              ((raw['hero_slides'] as unknown[]) ?? []).map(mapHeroSlide),
       heroSlideshow:           mapHeroSlideshow(raw['hero_slideshow']),
+      bannerOptions:           mapBannerOptions(raw['banner_options']),
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
       headerSettings:          mapHeaderSettings(raw['header_settings']),

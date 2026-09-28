@@ -142,6 +142,8 @@ export type {
   StorefrontConfig,
   HeroSlide,
   HeroSlideshow,
+  BannerOption,
+  BannerOptions,
   FulfillmentLocation,
   UpdateStorefrontConfigParams,
   StripePaymentIntent,
