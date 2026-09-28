@@ -10,6 +10,8 @@ export interface OrderingCategory {
   color: string | null;
   sortOrder: number;
   isActive: boolean;
+  /** How many products sit in it. A menu wide enough to say so, says so. */
+  productCount: number;
 }
 
 export interface ModifierOption {
@@ -412,7 +414,22 @@ export interface HeaderSettings {
   categoryRail: string;
   /** Departments kept out of the rail without deactivating them. */
   hiddenCategoryIds: string[];
-  sticky: boolean;
+  /**
+   * How the departments are presented on a wide screen.
+   * rail = a scrolling row under the bar | inline = in the bar itself |
+   * mega = one panel behind a trigger | drawer = a side panel.
+   */
+  menu: string;
+  /** sheet | drawer | fullscreen — a phone is not a narrow desktop. */
+  mobileMenu: string;
+  /**
+   * What the header does as the page moves under it.
+   * condense | fixed | hide | static. Replaces the old `sticky` switch, which
+   * the API still reads for any shop that set it.
+   */
+  scroll: string;
+  /** solid | transparent | floating. */
+  surface: string;
 }
 
 /**
@@ -771,7 +788,12 @@ function mapHeaderSettings(raw: unknown): HeaderSettings {
     showCart:          bool('show_cart', true),
     categoryRail:      (v['category_rail'] as string) || 'all',
     hiddenCategoryIds: (v['hidden_category_ids'] as string[]) ?? [],
-    sticky:            bool('sticky', true),
+    menu:              (v['menu'] as string) || 'rail',
+    mobileMenu:        (v['mobile_menu'] as string) || 'sheet',
+    // `scroll` replaced the `sticky` switch. The API reads a stored `sticky`
+    // and answers in `scroll`, so nothing here needs to know about it.
+    scroll:            (v['scroll'] as string) || 'condense',
+    surface:           (v['surface'] as string) || 'solid',
   };
 }
 
@@ -789,7 +811,10 @@ function unmapHeaderSettings(settings: Partial<HeaderSettings>): Record<string, 
   if (settings.showCart !== undefined) out['show_cart'] = settings.showCart;
   if (settings.categoryRail !== undefined) out['category_rail'] = settings.categoryRail;
   if (settings.hiddenCategoryIds !== undefined) out['hidden_category_ids'] = settings.hiddenCategoryIds;
-  if (settings.sticky !== undefined) out['sticky'] = settings.sticky;
+  if (settings.menu !== undefined) out['menu'] = settings.menu;
+  if (settings.mobileMenu !== undefined) out['mobile_menu'] = settings.mobileMenu;
+  if (settings.scroll !== undefined) out['scroll'] = settings.scroll;
+  if (settings.surface !== undefined) out['surface'] = settings.surface;
   return out;
 }
 
@@ -1431,12 +1456,28 @@ export class OrderingClient {
   // ── Catalog ─────────────────────────────────────────────────────────────────
 
   async listCategories(opts: { locationId?: string } = {}): Promise<OrderingListResponse<OrderingCategory>> {
-    return this.callList<OrderingCategory>(
+    const res = await this.callList<Record<string, unknown>>(
       // API serves the list at /categories; /catalog/categories matched the
       // single-product route (/catalog/{id}) and 404'd "Product not found".
       { method: 'GET', path: '/v1/pos/categories', query: { location_id: opts.locationId } },
       'categories',
     );
+    // This list used to be cast straight to the type, which meant `sortOrder`
+    // and `isActive` were named for fields the wire does not have and were
+    // `undefined` on every category ever returned. Nothing read them, so it
+    // never showed — map the names rather than assert them.
+    return {
+      ...res,
+      data: res.data.map((raw): OrderingCategory => ({
+        id:           (raw['id'] as string) ?? '',
+        name:         (raw['name'] as string) ?? '',
+        icon:         (raw['icon'] as string | null) ?? null,
+        color:        (raw['color'] as string | null) ?? null,
+        sortOrder:    Number(raw['sort_order']) || 0,
+        isActive:     (raw['is_active'] as boolean | undefined) ?? true,
+        productCount: Number(raw['product_count']) || 0,
+      })),
+    };
   }
 
   async listProducts(opts: {
