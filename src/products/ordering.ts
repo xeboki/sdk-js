@@ -530,6 +530,39 @@ function mapBannerOptions(raw: unknown): BannerOptions {
   return out;
 }
 
+/** What a shop may load, and what it may report. */
+export interface AnalyticsSettings {
+  ga4: { enabled: boolean; measurementId: string };
+  meta: {
+    enabled: boolean;
+    pixelId: string;
+    trackPurchases: boolean;
+    trackAddToCart: boolean;
+  };
+  gtm: { enabled: boolean; containerId: string };
+}
+
+function mapAnalytics(raw: unknown): AnalyticsSettings {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const group = (key: string) =>
+    (v[key] && typeof v[key] === 'object' ? v[key] : {}) as Record<string, unknown>;
+  const ga4 = group('ga4');
+  const meta = group('meta');
+  const gtm = group('gtm');
+  // Anything unreadable means OFF. A tag loaded because a field could not be
+  // parsed is a shopper tracked by accident.
+  return {
+    ga4: { enabled: ga4['enabled'] === true, measurementId: (ga4['measurement_id'] as string) ?? '' },
+    meta: {
+      enabled: meta['enabled'] === true,
+      pixelId: (meta['pixel_id'] as string) ?? '',
+      trackPurchases: meta['track_purchases'] !== false,
+      trackAddToCart: meta['track_add_to_cart'] !== false,
+    },
+    gtm: { enabled: gtm['enabled'] === true, containerId: (gtm['container_id'] as string) ?? '' },
+  };
+}
+
 /** What a shop asks a shopper for at checkout. */
 export interface CheckoutSettings {
   /** 'guest' | 'optional' | 'required' */
@@ -825,6 +858,8 @@ export interface StorefrontConfig {
   acceptOnlineOrders: boolean;
   /** What the shop asks for at checkout. */
   checkout: CheckoutSettings;
+  /** What may be loaded and what may be reported. */
+  analytics: AnalyticsSettings;
   /** Empty = the storefront's own, derived from the merchant's shipping rules. */
   trustItems: TrustItem[];
   /** Per-band wording. A blank field falls back to the storefront's own. */
@@ -1957,6 +1992,7 @@ export class OrderingClient {
       typography:              (raw['typography'] as Record<string, string>) ?? {},
       acceptOnlineOrders:      raw['accept_online_orders'] !== false,
       checkout:                mapCheckout(raw['checkout']),
+      analytics:               mapAnalytics(raw['analytics']),
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
       headerSettings:          mapHeaderSettings(raw['header_settings']),
