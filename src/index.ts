@@ -148,6 +148,7 @@ export type {
   Announcement,
   CheckoutSettings,
   AnalyticsSettings,
+  DeliveryEstimate,
   FulfillmentLocation,
   UpdateStorefrontConfigParams,
   StripePaymentIntent,

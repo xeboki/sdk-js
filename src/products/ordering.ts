@@ -530,6 +530,26 @@ function mapBannerOptions(raw: unknown): BannerOptions {
   return out;
 }
 
+/** How long delivery takes, when the shop has said. */
+export interface DeliveryEstimate {
+  /** Null when the shop has never said — never an invented number. */
+  minDays: number | null;
+  maxDays: number | null;
+  /** '12pm' | '2pm' | '4pm' | '6pm', or '' when there is no estimate. */
+  cutoff: string;
+}
+
+function mapDeliveryEstimate(raw: unknown): DeliveryEstimate {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const days = (key: string) =>
+    typeof v[key] === 'number' ? (v[key] as number) : null;
+  return {
+    minDays: days('min_days'),
+    maxDays: days('max_days'),
+    cutoff: (v['cutoff'] as string) ?? '',
+  };
+}
+
 /** What a shop may load, and what it may report. */
 export interface AnalyticsSettings {
   ga4: { enabled: boolean; measurementId: string };
@@ -860,6 +880,12 @@ export interface StorefrontConfig {
   checkout: CheckoutSettings;
   /** What may be loaded and what may be reported. */
   analytics: AnalyticsSettings;
+  /** How long delivery takes, when the shop has said. */
+  deliveryEstimate: DeliveryEstimate;
+  /** False hides sold-out products from the catalogue. Absent means shown. */
+  showOutOfStock: boolean;
+  /** True puts the whole shop behind a sign-in. Absent means open. */
+  requireLoginToBrowse: boolean;
   /** Empty = the storefront's own, derived from the merchant's shipping rules. */
   trustItems: TrustItem[];
   /** Per-band wording. A blank field falls back to the storefront's own. */
@@ -1993,6 +2019,9 @@ export class OrderingClient {
       acceptOnlineOrders:      raw['accept_online_orders'] !== false,
       checkout:                mapCheckout(raw['checkout']),
       analytics:               mapAnalytics(raw['analytics']),
+      deliveryEstimate:        mapDeliveryEstimate(raw['delivery_estimate']),
+      showOutOfStock:          raw['show_out_of_stock'] !== false,
+      requireLoginToBrowse:    raw['require_login_to_browse'] === true,
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
       headerSettings:          mapHeaderSettings(raw['header_settings']),
