@@ -934,6 +934,11 @@ export interface StorefrontConfig {
   /** Heading font family. Empty = falls back to `font`, then the preset's. */
   headingFont: string | null;
   /**
+   * The face the shop's NAME is set in when it has no logo.
+   * Blank falls through to the heading face, which is what it always used.
+   */
+  wordmarkFont: string | null;
+  /**
    * The merchant's page background. Empty = the preset's own — and it is
    * empty unless they switched the picker on, because the Design screen
    * shipped that field pre-filled with a colour nobody chose.
@@ -1059,6 +1064,7 @@ export interface UpdateStorefrontConfigParams {
   secondaryColor?: string;
   font?: string;
   headingFont?: string;
+  wordmarkFont?: string;
   logoUrl?: string;
   faviconUrl?: string;
   heroImageUrl?: string;
@@ -2120,6 +2126,7 @@ export class OrderingClient {
       secondaryColor:          (raw['secondary_color'] as string) ?? '#ffffff',
       font:                    (raw['font'] as string) ?? 'inter',
       headingFont:             (raw['heading_font'] as string | null) ?? null,
+      wordmarkFont:            (raw['wordmark_font'] as string | null) ?? null,
       backgroundColor:         (raw['background_color'] as string) ?? '',
       backgroundCustom:        (raw['background_custom'] as boolean) ?? false,
       logoUrl:                 (raw['logo_url'] as string | null) ?? null,
@@ -2213,6 +2220,7 @@ export class OrderingClient {
         ...(params.secondaryColor !== undefined && { secondary_color: params.secondaryColor }),
         ...(params.font !== undefined && { font: params.font }),
         ...(params.headingFont !== undefined && { heading_font: params.headingFont }),
+        ...(params.wordmarkFont !== undefined && { wordmark_font: params.wordmarkFont }),
         ...(params.backgroundColor !== undefined && { background_color: params.backgroundColor }),
         ...(params.backgroundCustom !== undefined && { background_custom: params.backgroundCustom }),
         ...(params.logoUrl !== undefined && { logo_url: params.logoUrl }),
