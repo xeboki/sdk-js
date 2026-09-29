@@ -479,6 +479,15 @@ export interface HeaderSettings {
   /** A line in that band. */
   utilityMessage: string;
   /**
+   * The shop's one important button, in the bar.
+   *
+   * Blank label means no button. It points at whatever a menu entry can
+   * point at — the same question, so the same answers.
+   */
+  actionLabel: string;
+  actionTarget: string;
+  actionValue: string;
+  /**
    * How the departments are presented on a wide screen.
    * rail = a scrolling row under the bar | inline = in the bar itself |
    * mega = one panel behind a trigger | drawer = a side panel.
@@ -857,6 +866,9 @@ function mapHeaderSettings(raw: unknown): HeaderSettings {
     showBorder:        bool('show_border', true),
     utilityBar:        (v['utility_bar'] as string) || 'off',
     utilityMessage:    (v['utility_message'] as string) ?? '',
+    actionLabel:       (v['action_label'] as string) ?? '',
+    actionTarget:      (v['action_target'] as string) || 'catalog',
+    actionValue:       (v['action_value'] as string) ?? '',
     menu:              (v['menu'] as string) || 'rail',
     mobileMenu:        (v['mobile_menu'] as string) || 'sheet',
     // `scroll` replaced the `sticky` switch. The API reads a stored `sticky`
@@ -916,6 +928,9 @@ function unmapHeaderSettings(settings: Partial<HeaderSettings>): Record<string, 
   if (settings.showBorder !== undefined) out['show_border'] = settings.showBorder;
   if (settings.utilityBar !== undefined) out['utility_bar'] = settings.utilityBar;
   if (settings.utilityMessage !== undefined) out['utility_message'] = settings.utilityMessage;
+  if (settings.actionLabel !== undefined) out['action_label'] = settings.actionLabel;
+  if (settings.actionTarget !== undefined) out['action_target'] = settings.actionTarget;
+  if (settings.actionValue !== undefined) out['action_value'] = settings.actionValue;
   if (settings.menu !== undefined) out['menu'] = settings.menu;
   if (settings.mobileMenu !== undefined) out['mobile_menu'] = settings.mobileMenu;
   if (settings.scroll !== undefined) out['scroll'] = settings.scroll;
