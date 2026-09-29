@@ -938,6 +938,8 @@ export interface StorefrontConfig {
    * Blank falls through to the heading face, which is what it always used.
    */
   wordmarkFont: string | null;
+  /** A line under the mark, drawn by the layouts with a row deep enough. */
+  wordmarkTagline: string;
   /**
    * The merchant's page background. Empty = the preset's own — and it is
    * empty unless they switched the picker on, because the Design screen
@@ -1065,6 +1067,7 @@ export interface UpdateStorefrontConfigParams {
   font?: string;
   headingFont?: string;
   wordmarkFont?: string;
+  wordmarkTagline?: string;
   logoUrl?: string;
   faviconUrl?: string;
   heroImageUrl?: string;
@@ -2127,6 +2130,7 @@ export class OrderingClient {
       font:                    (raw['font'] as string) ?? 'inter',
       headingFont:             (raw['heading_font'] as string | null) ?? null,
       wordmarkFont:            (raw['wordmark_font'] as string | null) ?? null,
+      wordmarkTagline:         (raw['wordmark_tagline'] as string) ?? '',
       backgroundColor:         (raw['background_color'] as string) ?? '',
       backgroundCustom:        (raw['background_custom'] as boolean) ?? false,
       logoUrl:                 (raw['logo_url'] as string | null) ?? null,
@@ -2221,6 +2225,7 @@ export class OrderingClient {
         ...(params.font !== undefined && { font: params.font }),
         ...(params.headingFont !== undefined && { heading_font: params.headingFont }),
         ...(params.wordmarkFont !== undefined && { wordmark_font: params.wordmarkFont }),
+        ...(params.wordmarkTagline !== undefined && { wordmark_tagline: params.wordmarkTagline }),
         ...(params.backgroundColor !== undefined && { background_color: params.backgroundColor }),
         ...(params.backgroundCustom !== undefined && { background_custom: params.backgroundCustom }),
         ...(params.logoUrl !== undefined && { logo_url: params.logoUrl }),
