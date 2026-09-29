@@ -341,6 +341,13 @@ export interface MenuItem {
   /** A picture, for a menu wide enough to show one. */
   imageUrl: string;
   openInNewTab: boolean;
+  /**
+   * How this entry's children are laid out when a full-width panel opens.
+   * auto | column | tiles | strip. `auto` is a column when it holds links
+   * and a picture when it holds a picture — what every menu did before this
+   * was a choice.
+   */
+  display: string;
   children: MenuItem[];
 }
 
@@ -867,6 +874,7 @@ function mapMenuItems(raw: unknown): MenuItem[] {
       badge:        (item['badge'] as string) ?? '',
       imageUrl:     (item['image_url'] as string) ?? '',
       openInNewTab: (item['open_in_new_tab'] as boolean) ?? false,
+      display:      (item['display'] as string) ?? 'auto',
       children:     mapMenuItems(item['children']),
     };
   });
