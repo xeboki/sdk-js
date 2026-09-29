@@ -314,6 +314,41 @@ export interface StoreConfig {
   paymentMethods: StorePaymentMethod[];
 }
 
+/**
+ * One entry in a shop's menu.
+ *
+ * `target` says what kind of thing it points at and `value` identifies it.
+ * The address is NOT stored — the storefront knows its own routes, and a
+ * stored URL would rot the first time one of them changed.
+ */
+export interface MenuItem {
+  id: string;
+  label: string;
+  /**
+   * catalog | category | categories | product | page | blog | book |
+   * repairs | account | url | heading.
+   *
+   * `categories` means "all of them, live" — expanded when the page is drawn,
+   * so a department added at the till appears without anybody editing a menu.
+   * `heading` is a label with nowhere to go, which is what makes a mega
+   * panel's columns readable.
+   */
+  target: string;
+  /** The id, slug or address the target needs. Empty for the standalone ones. */
+  value: string;
+  /** One word beside the label — "NEW", "SALE". */
+  badge: string;
+  /** A picture, for a menu wide enough to show one. */
+  imageUrl: string;
+  openInNewTab: boolean;
+  children: MenuItem[];
+}
+
+export interface Navigation {
+  /** The header's menu. Empty means the shop has never built one. */
+  main: MenuItem[];
+}
+
 export interface NavLink {
   label: string;
   url: string;
@@ -812,6 +847,36 @@ function mapHeaderSettings(raw: unknown): HeaderSettings {
   };
 }
 
+/**
+ * The menu tree, with every field present.
+ *
+ * Named rather than cast, for the reason the category list was: a cast says
+ * the wire already uses these names and it does not — `image_url` and
+ * `open_in_new_tab` would have been `undefined` on every item, and a badge
+ * that is sometimes absent reads as a bug in the menu rather than in this.
+ */
+function mapMenuItems(raw: unknown): MenuItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((v): MenuItem => {
+    const item = (v ?? {}) as Record<string, unknown>;
+    return {
+      id:           (item['id'] as string) ?? '',
+      label:        (item['label'] as string) ?? '',
+      target:       (item['target'] as string) ?? 'heading',
+      value:        (item['value'] as string) ?? '',
+      badge:        (item['badge'] as string) ?? '',
+      imageUrl:     (item['image_url'] as string) ?? '',
+      openInNewTab: (item['open_in_new_tab'] as boolean) ?? false,
+      children:     mapMenuItems(item['children']),
+    };
+  });
+}
+
+function mapNavigation(raw: unknown): Navigation {
+  const nav = (raw ?? {}) as Record<string, unknown>;
+  return { main: mapMenuItems(nav['main']) };
+}
+
 function unmapHeaderSettings(settings: Partial<HeaderSettings>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (settings.search !== undefined) out['search'] = settings.search;
@@ -950,6 +1015,8 @@ export interface StorefrontConfig {
   structuredDataEnabled: boolean;
   /** Custom nav links shown in the header (appended after built-in links) */
   navLinks: NavLink[];
+  /** The header's menu, as a tree the merchant owns. */
+  navigation: Navigation;
   /** Footer columns with custom links */
   footerColumns: FooterColumn[];
   socialLinks: Record<string, string>;
@@ -1027,6 +1094,7 @@ export interface UpdateStorefrontConfigParams {
   googleVerificationCode?: string;
   structuredDataEnabled?: boolean;
   navLinks?: NavLink[];
+  navigation?: Navigation;
   footerColumns?: FooterColumn[];
   socialLinks?: Record<string, string>;
   customDomain?: string;
@@ -2094,6 +2162,7 @@ export class OrderingClient {
       googleVerificationCode:  (raw['google_verification_code'] as string | null) ?? null,
       structuredDataEnabled:   (raw['structured_data_enabled'] as boolean) ?? false,
       navLinks:                (raw['nav_links'] as NavLink[]) ?? [],
+      navigation:              mapNavigation(raw['navigation']),
       footerColumns:           (raw['footer_columns'] as FooterColumn[]) ?? [],
       socialLinks:             (raw['social_links'] as Record<string, string>) ?? {},
       customDomain:            (raw['custom_domain'] as string | null) ?? null,
@@ -2179,6 +2248,7 @@ export class OrderingClient {
         ...(params.googleVerificationCode !== undefined && { google_verification_code: params.googleVerificationCode }),
         ...(params.structuredDataEnabled !== undefined && { structured_data_enabled: params.structuredDataEnabled }),
         ...(params.navLinks !== undefined && { nav_links: params.navLinks }),
+        ...(params.navigation !== undefined && { navigation: params.navigation }),
         ...(params.footerColumns !== undefined && { footer_columns: params.footerColumns }),
         ...(params.socialLinks !== undefined && { social_links: params.socialLinks }),
         ...(params.customDomain !== undefined && { custom_domain: params.customDomain }),

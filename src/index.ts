@@ -117,6 +117,8 @@ export type {
   // Defined alongside the CMS methods that return them but never re-exported,
   // so every consumer importing them failed to compile.
   NavLink,
+  MenuItem,
+  Navigation,
   BlogPost,
   CustomPage,
   OrderingClassSession,
