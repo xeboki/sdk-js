@@ -415,10 +415,13 @@ export interface HeaderSettings {
   /** Departments kept out of the rail without deactivating them. */
   hiddenCategoryIds: string[];
   /**
-   * Where the shop's mark sits, and what the menu does around it.
-   * left | centred | stacked | split. Dawn's `logo_position`.
+   * The header's arrangement, by name. One drawn layout per name.
+   *
+   * Supersedes `logoPosition`, which named four of them; the API reads a
+   * stored `logo_position` and answers in `style`, so nothing here needs to
+   * know it existed.
    */
-  logoPosition: string;
+  style: string;
   /** normal | upper — whether the department names shout. */
   linkCase: string;
   /** The hairline under the bar. */
@@ -797,7 +800,7 @@ function mapHeaderSettings(raw: unknown): HeaderSettings {
     showCart:          bool('show_cart', true),
     categoryRail:      (v['category_rail'] as string) || 'all',
     hiddenCategoryIds: (v['hidden_category_ids'] as string[]) ?? [],
-    logoPosition:      (v['logo_position'] as string) || 'left',
+    style:             (v['style'] as string) || 'classic',
     linkCase:          (v['link_case'] as string) || 'upper',
     showBorder:        bool('show_border', true),
     menu:              (v['menu'] as string) || 'rail',
@@ -823,7 +826,7 @@ function unmapHeaderSettings(settings: Partial<HeaderSettings>): Record<string, 
   if (settings.showCart !== undefined) out['show_cart'] = settings.showCart;
   if (settings.categoryRail !== undefined) out['category_rail'] = settings.categoryRail;
   if (settings.hiddenCategoryIds !== undefined) out['hidden_category_ids'] = settings.hiddenCategoryIds;
-  if (settings.logoPosition !== undefined) out['logo_position'] = settings.logoPosition;
+  if (settings.style !== undefined) out['style'] = settings.style;
   if (settings.linkCase !== undefined) out['link_case'] = settings.linkCase;
   if (settings.showBorder !== undefined) out['show_border'] = settings.showBorder;
   if (settings.menu !== undefined) out['menu'] = settings.menu;
