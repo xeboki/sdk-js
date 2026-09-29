@@ -469,6 +469,16 @@ export interface HeaderSettings {
   /** The hairline under the bar. */
   showBorder: boolean;
   /**
+   * off | on — the thin band above the bar.
+   *
+   * On, it takes the store picker, the language and the currency out of the
+   * bar. Those three are what crowd a centred layout, so this is what lets
+   * one carry them at all.
+   */
+  utilityBar: string;
+  /** A line in that band. */
+  utilityMessage: string;
+  /**
    * How the departments are presented on a wide screen.
    * rail = a scrolling row under the bar | inline = in the bar itself |
    * mega = one panel behind a trigger | drawer = a side panel.
@@ -845,6 +855,8 @@ function mapHeaderSettings(raw: unknown): HeaderSettings {
     style:             (v['style'] as string) || 'classic',
     linkCase:          (v['link_case'] as string) || 'upper',
     showBorder:        bool('show_border', true),
+    utilityBar:        (v['utility_bar'] as string) || 'off',
+    utilityMessage:    (v['utility_message'] as string) ?? '',
     menu:              (v['menu'] as string) || 'rail',
     mobileMenu:        (v['mobile_menu'] as string) || 'sheet',
     // `scroll` replaced the `sticky` switch. The API reads a stored `sticky`
@@ -902,6 +914,8 @@ function unmapHeaderSettings(settings: Partial<HeaderSettings>): Record<string, 
   if (settings.style !== undefined) out['style'] = settings.style;
   if (settings.linkCase !== undefined) out['link_case'] = settings.linkCase;
   if (settings.showBorder !== undefined) out['show_border'] = settings.showBorder;
+  if (settings.utilityBar !== undefined) out['utility_bar'] = settings.utilityBar;
+  if (settings.utilityMessage !== undefined) out['utility_message'] = settings.utilityMessage;
   if (settings.menu !== undefined) out['menu'] = settings.menu;
   if (settings.mobileMenu !== undefined) out['mobile_menu'] = settings.mobileMenu;
   if (settings.scroll !== undefined) out['scroll'] = settings.scroll;
