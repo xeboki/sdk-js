@@ -427,6 +427,53 @@ export interface SectionCopy {
   linkLabel?: string;
 }
 
+/**
+ * One band of the home page, as the merchant arranged it.
+ *
+ * The page is a list they own — ordered, repeatable, and drawn from the
+ * catalogue the API serves. An EMPTY list means they have arranged nothing
+ * and the storefront draws the page it has always drawn; it does not mean an
+ * empty page. Those have to stay different answers, or every shop that
+ * predates the editor loses its home page on deploy.
+ */
+export interface HomeSection {
+  id: string;
+  type: string;
+  variant: string;
+  visible: boolean;
+  /** eyebrow / title / lede / linkLabel, blank meaning the band's own words. */
+  copy: Record<string, string>;
+  /** Whatever this kind of band carries: pictures, a date, which courses. */
+  settings: Record<string, unknown>;
+}
+
+/**
+ * A row's columns, each a stack of blocks.
+ *
+ * Depth stops at one: a row may hold columns, a column may hold blocks, and a
+ * block is never a row. Deeper than that is a grid engine rather than a shop
+ * front — the API refuses it, and this type says so.
+ */
+export interface HomeColumn {
+  blocks: HomeSection[];
+}
+
+
+export function mapHomeSections(raw: unknown): HomeSection[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item, index) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      id: String(row['id'] ?? `section-${index}`),
+      type: String(row['type'] ?? ''),
+      variant: String(row['variant'] ?? ''),
+      visible: row['visible'] !== false,
+      copy: (row['copy'] as Record<string, string>) ?? {},
+      settings: (row['settings'] as Record<string, unknown>) ?? {},
+    };
+  }).filter((s) => s.type !== '');
+}
+
 /** Per-band wording, keyed by the same section ids `sections` uses. */
 export type StorefrontSectionCopy = Record<string, SectionCopy>;
 
@@ -1000,6 +1047,8 @@ export interface StorefrontConfig {
   announcementBar: string | null;
   /** Band visibility. Absent key = shown. */
   sections: StorefrontSections;
+  /** The home page the merchant arranged. Empty = the page it always drew. */
+  homeSections: HomeSection[];
   /** Overrides the preset's hero treatment: banner | split | minimal. */
   heroStyle: string;
   /** The banner module. EMPTY means this shop composes one banner from the
@@ -1044,6 +1093,12 @@ export interface StorefrontConfig {
   sectionCopy: StorefrontSectionCopy;
   headerSettings: HeaderSettings;
   /** A line under the store name in the footer. Empty = none. */
+  /**
+   * The statutory age statement for a shop that sells alcohol.
+   * Shown by the storefront in the shell, on every page — not as a
+   * home-page band, which is a list a merchant can empty.
+   */
+  ageNotice: string;
   footerTagline: string;
   footerShowSocial: boolean;
   footerShowAddress: boolean;
@@ -1118,6 +1173,7 @@ export interface UpdateStorefrontConfigParams {
   featuredProductIds?: string[];
   announcementBar?: string;
   sections?: StorefrontSections;
+  homeSections?: HomeSection[];
   heroStyle?: string;
   /** A list is replaced wholesale, so send every slide to be kept. */
   heroSlides?: Partial<HeroSlide>[];
@@ -1130,6 +1186,7 @@ export interface UpdateStorefrontConfigParams {
   headerSettings?: Partial<HeaderSettings>;
   backgroundColor?: string;
   backgroundCustom?: boolean;
+  ageNotice?: string;
   footerTagline?: string;
   footerShowSocial?: boolean;
   footerShowAddress?: boolean;
@@ -2183,6 +2240,7 @@ export class OrderingClient {
       featuredProductIds:      (raw['featured_product_ids'] as string[]) ?? [],
       announcementBar:         (raw['announcement_bar'] as string | null) ?? null,
       sections:                (raw['sections'] as StorefrontSections) ?? {},
+      homeSections:            mapHomeSections(raw['home_sections']),
       heroStyle:               (raw['hero_style'] as string) ?? '',
       heroSlides:              ((raw['hero_slides'] as unknown[]) ?? []).map(mapHeroSlide),
       heroSlideshow:           mapHeroSlideshow(raw['hero_slideshow']),
@@ -2200,6 +2258,7 @@ export class OrderingClient {
       trustItems:              (raw['trust_items'] as TrustItem[]) ?? [],
       sectionCopy:             mapSectionCopy(raw['section_copy']),
       headerSettings:          mapHeaderSettings(raw['header_settings']),
+      ageNotice:               (raw['age_notice'] as string) ?? '',
       footerTagline:           (raw['footer_tagline'] as string) ?? '',
       footerShowSocial:        (raw['footer_show_social'] as boolean) ?? true,
       footerShowAddress:       (raw['footer_show_address'] as boolean) ?? true,
@@ -2288,6 +2347,7 @@ export class OrderingClient {
         ...(params.trustItems !== undefined && { trust_items: params.trustItems }),
         ...(params.sectionCopy !== undefined && { section_copy: unmapSectionCopy(params.sectionCopy) }),
         ...(params.headerSettings !== undefined && { header_settings: unmapHeaderSettings(params.headerSettings) }),
+        ...(params.ageNotice !== undefined && { age_notice: params.ageNotice }),
         ...(params.footerTagline !== undefined && { footer_tagline: params.footerTagline }),
         ...(params.footerShowSocial !== undefined && { footer_show_social: params.footerShowSocial }),
         ...(params.footerShowAddress !== undefined && { footer_show_address: params.footerShowAddress }),

@@ -119,6 +119,8 @@ export type {
   NavLink,
   MenuItem,
   Navigation,
+  HomeSection,
+  HomeColumn,
   BlogPost,
   CustomPage,
   OrderingClassSession,
