@@ -1009,6 +1009,10 @@ export type StorefrontSections = Record<string, boolean>;
 export interface StorefrontConfig {
   storefrontSlug: string | null;
   isPublished: boolean;
+  /** There is a home page saved but not published. */
+  homeSectionsHasDraft: boolean;
+  /** `homeSections` on THIS response is that unpublished page. */
+  homeSectionsIsPreview: boolean;
   /** Theme preset id the storefront paints from — 'classic' | 'modern' | 'warm' | 'minimal' | 'bold' | 'vibrant'. */
   theme: string;
   primaryColor: string;
@@ -2212,10 +2216,27 @@ export class OrderingClient {
     };
   }
 
-  /** Ecommerce storefront theme, colors, hero, featured collections, SEO defaults. */
-  async getStorefrontConfig(): Promise<StorefrontConfig> {
-    const raw = await this.call<Record<string, unknown>>({ method: 'GET', path: '/v1/pos/storefront-config' });
+  /**
+   * Ecommerce storefront theme, colors, hero, featured collections, SEO defaults.
+   *
+   * With `previewToken`, the home page comes back as the merchant is working
+   * on it rather than as the public sees it. Everything else is identical —
+   * which is the point of putting it here rather than fetching the preview
+   * separately: a caller that mapped the preview response itself would be a
+   * second copy of the mapping below, and it would show the right bands with
+   * every other setting fallen back to a default.
+   */
+  async getStorefrontConfig(options?: { previewToken?: string }): Promise<StorefrontConfig> {
+    const query = options?.previewToken
+      ? `?preview_token=${encodeURIComponent(options.previewToken)}`
+      : '';
+    const raw = await this.call<Record<string, unknown>>({ method: 'GET', path: `/v1/pos/storefront-config${query}` });
     return {
+      // Whether there is unpublished work, and whether THIS is it. A
+      // preview that cannot say it is a preview is how somebody ships a
+      // half-finished page believing they already had.
+      homeSectionsHasDraft:    (raw['home_sections_has_draft'] as boolean) ?? false,
+      homeSectionsIsPreview:   (raw['home_sections_is_preview'] as boolean) ?? false,
       storefrontSlug:          (raw['storefront_slug'] as string | null) ?? null,
       isPublished:             (raw['is_published'] as boolean) ?? false,
       theme:                   (raw['theme'] as string) ?? 'classic',
