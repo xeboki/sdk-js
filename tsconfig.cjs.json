@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    // `bundler` resolution is only legal with an ESM module setting, and the
+    // build step that needed this file has never existed — `npm run build`
+    // has failed on its second command, leaving `main` pointing at a
+    // directory nothing wrote.
+    "moduleResolution": "Node",
+    "outDir": "./dist/cjs",
+    // The ESM build emits the types once. A second copy would be two
+    // declaration trees for one API, and the `types` entry can only name one.
+    "declaration": false,
+    "declarationMap": false,
+    // Inherited from the base config, and illegal once declarations are off.
+    "declarationDir": null
+  }
+}
