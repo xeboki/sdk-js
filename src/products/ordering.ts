@@ -1009,6 +1009,12 @@ export type StorefrontSections = Record<string, boolean>;
 export interface StorefrontConfig {
   storefrontSlug: string | null;
   isPublished: boolean;
+  /** How the catalogue listing behaves. */
+  catalogShowPrices: boolean;
+  catalogShowStock: boolean;
+  /** '' means the listing's own order. */
+  catalogDefaultSort: string;
+  catalogPerPage: number;
   /** There is a home page saved but not published. */
   homeSectionsHasDraft: boolean;
   /** `homeSections` on THIS response is that unpublished page. */
@@ -2235,6 +2241,12 @@ export class OrderingClient {
       // Whether there is unpublished work, and whether THIS is it. A
       // preview that cannot say it is a preview is how somebody ships a
       // half-finished page believing they already had.
+      // Absent means today's shop: prices shown, stock counts not, the
+      // listing's own order, 24 to a page.
+      catalogShowPrices:       (raw['catalog_show_prices'] as boolean) ?? true,
+      catalogShowStock:        (raw['catalog_show_stock'] as boolean) ?? false,
+      catalogDefaultSort:      (raw['catalog_default_sort'] as string) ?? '',
+      catalogPerPage:          (raw['catalog_per_page'] as number) ?? 24,
       homeSectionsHasDraft:    (raw['home_sections_has_draft'] as boolean) ?? false,
       homeSectionsIsPreview:   (raw['home_sections_is_preview'] as boolean) ?? false,
       storefrontSlug:          (raw['storefront_slug'] as string | null) ?? null,
