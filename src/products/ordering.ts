@@ -126,6 +126,28 @@ export interface DiscountValidation {
   reason: string | null;
   value: number | null;
   discountAmount: number | null;
+
+  /** Worth the delivery fee, not a sum off the goods.
+   *
+   * A checkout that adds this to `discountAmount` gives the shopper the offer
+   * twice; it zeroes the shipping line instead. */
+  freeShipping: boolean;
+}
+
+/** The offer a basket gets without the shopper typing anything.
+ *
+ * A shop can run "10% off everything this week" or "free delivery over
+ * fifty" with no code at all. Advisory: the order endpoint resolves the same
+ * rule again, because a saving a client asserts is a saving anybody can
+ * assert. */
+export interface AutomaticDiscount {
+  applies: boolean;
+  id?: string;
+  name?: string;
+  type?: string;
+  value?: number;
+  discountAmount?: number;
+  freeShipping?: boolean;
 }
 
 export interface OrderingAppointment {
@@ -1833,7 +1855,7 @@ export class OrderingClient {
 
   async validateDiscount(
     code: string,
-    opts: { orderTotal?: number; locationId?: string } = {},
+    opts: { orderTotal?: number; locationId?: string; quantity?: number } = {},
   ): Promise<DiscountValidation> {
     // The endpoint answers in snake_case like the rest of the API; this used to
     // return the raw body, so `discountAmount` was always undefined.
@@ -1843,6 +1865,7 @@ export class OrderingClient {
       type: string | null;
       value: number | null;
       discount_amount: number | null;
+      free_shipping?: boolean;
     }>({
       method: 'POST',
       path: '/v1/pos/discounts/validate',
@@ -1850,6 +1873,8 @@ export class OrderingClient {
         code,
         ...(opts.orderTotal !== undefined && { order_total: opts.orderTotal }),
         ...(opts.locationId !== undefined && { location_id: opts.locationId }),
+        // A promotion with a minimum item count cannot be judged without it.
+        ...(opts.quantity !== undefined && { quantity: opts.quantity }),
       },
     });
     return {
@@ -1858,6 +1883,42 @@ export class OrderingClient {
       reason: raw.reason ?? null,
       value: raw.value ?? null,
       discountAmount: raw.discount_amount ?? null,
+      freeShipping: raw.free_shipping ?? false,
+    };
+  }
+
+  /** The offer this basket gets with no code typed, if the shop runs one. */
+  async automaticDiscount(
+    opts: { orderTotal?: number; quantity?: number; shippingAmount?: number } = {},
+  ): Promise<AutomaticDiscount> {
+    const raw = await this.call<{
+      applies: boolean;
+      id?: string;
+      name?: string;
+      type?: string;
+      value?: number;
+      discount_amount?: number;
+      free_shipping?: boolean;
+    }>({
+      method: 'POST',
+      path: '/v1/pos/discounts/automatic',
+      body: {
+        ...(opts.orderTotal !== undefined && { order_total: opts.orderTotal }),
+        ...(opts.quantity !== undefined && { quantity: opts.quantity }),
+        ...(opts.shippingAmount !== undefined && {
+          shipping_amount: opts.shippingAmount,
+        }),
+      },
+    });
+    if (!raw.applies) return { applies: false };
+    return {
+      applies: true,
+      id: raw.id,
+      name: raw.name,
+      type: raw.type,
+      value: raw.value,
+      discountAmount: raw.discount_amount ?? 0,
+      freeShipping: raw.free_shipping ?? false,
     };
   }
 
