@@ -140,6 +140,22 @@ export interface DiscountValidation {
  * fifty" with no code at all. Advisory: the order endpoint resolves the same
  * rule again, because a saving a client asserts is a saving anybody can
  * assert. */
+/** An offer the shop is running, for announcing rather than applying.
+ *
+ * Structured, not phrased: the wording belongs where the money is formatted
+ * and the shop's language is known. */
+export interface ShopOffer {
+  id: string;
+  name: string;
+  /** Empty for an offer that applies itself. */
+  code: string;
+  kind: string;
+  type: string;
+  value: number;
+  minOrderValue: number;
+  minQuantity: number;
+}
+
 export interface AutomaticDiscount {
   applies: boolean;
   id?: string;
@@ -1885,6 +1901,28 @@ export class OrderingClient {
       discountAmount: raw.discount_amount ?? null,
       freeShipping: raw.free_shipping ?? false,
     };
+  }
+
+  /** Everything the shop is running, for the storefront to announce.
+   *
+   * Only what is genuinely live — paused, unstarted, expired and used-up are
+   * left out by the API, so a strip built from this cannot advertise
+   * something a shopper would then be refused. */
+  async listOffers(): Promise<ShopOffer[]> {
+    const raw = await this.call<{ offers?: Array<Record<string, unknown>> }>({
+      method: 'GET',
+      path: '/v1/pos/offers',
+    });
+    return (raw.offers ?? []).map((o) => ({
+      id: String(o.id ?? ''),
+      name: String(o.name ?? ''),
+      code: String(o.code ?? ''),
+      kind: String(o.kind ?? 'code'),
+      type: String(o.type ?? 'percentage'),
+      value: Number(o.value ?? 0),
+      minOrderValue: Number(o.min_order_value ?? 0),
+      minQuantity: Number(o.min_quantity ?? 0),
+    }));
   }
 
   /** The offer this basket gets with no code typed, if the shop runs one. */

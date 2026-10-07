@@ -113,6 +113,8 @@ export type {
   OrderingLineItem,
   OrderingOrder,
   DiscountValidation,
+  AutomaticDiscount,
+  ShopOffer,
   OrderingAppointment,
   // Defined alongside the CMS methods that return them but never re-exported,
   // so every consumer importing them failed to compile.
