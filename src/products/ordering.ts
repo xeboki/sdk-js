@@ -118,6 +118,27 @@ export interface OrderingOrder {
   deliveryAddress: string | null;
   scheduledAt: string | null;
   createdAt: string;
+  /**
+   * The parcels, once the shop has sent any.
+   *
+   * The one thing a shopper opens their order page to find out, and the
+   * mapper dropped it — an order could be shipped, with a carrier and a
+   * tracking number recorded in the back office, and the shopper's own page
+   * had no field to show it in. Voided parcels are already filtered out by
+   * the API: the back office needs them for a support call, a shopper needs
+   * the one that is actually coming.
+   */
+  shipments: OrderShipment[];
+}
+
+export interface OrderShipment {
+  carrier: string;
+  service: string;
+  tracking: string;
+  /** Blank when the courier has no tracking page — a shop's own van, say.
+   *  A link that 404s reads as the shop having lost the order. */
+  trackingUrl: string;
+  shippedAt: string | null;
 }
 
 export interface DiscountValidation {
@@ -2087,6 +2108,14 @@ export class OrderingClient {
       deliveryAddress: (raw['delivery_address'] as string | null) ?? null,
       scheduledAt:     (raw['scheduled_at'] as string | null) ?? null,
       createdAt:       (raw['created_at'] as string) ?? (raw['createdAt'] as string) ?? '',
+      shipments:       ((raw['shipments'] as Array<Record<string, unknown>>) ?? [])
+        .map((s) => ({
+          carrier:     (s['carrier'] as string) ?? '',
+          service:     (s['service'] as string) ?? '',
+          tracking:    (s['tracking'] as string) ?? '',
+          trackingUrl: (s['tracking_url'] as string) ?? '',
+          shippedAt:   (s['shipped_at'] as string | null) ?? null,
+        })),
     };
   }
 

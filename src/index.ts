@@ -152,6 +152,7 @@ export type {
   BannerOptions,
   PromoPopup,
   Announcement,
+  OrderShipment,
   CheckoutSettings,
   AnalyticsSettings,
   DeliveryEstimate,
