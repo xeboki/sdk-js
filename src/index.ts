@@ -153,6 +153,7 @@ export type {
   PromoPopup,
   Announcement,
   OrderShipment,
+  DeliveryAddress,
   CheckoutSettings,
   AnalyticsSettings,
   DeliveryEstimate,

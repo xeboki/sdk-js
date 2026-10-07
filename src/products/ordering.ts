@@ -115,7 +115,18 @@ export interface OrderingOrder {
   tableId: string | null;
   notes: string | null;
   reference: string | null;
-  deliveryAddress: string | null;
+  /**
+   * Where it is going.
+   *
+   * Typed as a string, and the API has always sent an **object** for a
+   * delivery order. So `{order.deliveryAddress}` in the shopper's order page
+   * threw "Objects are not valid as a React child" and the page 500'd — for
+   * every delivery order ever placed. It went unseen because the shops it
+   * was tested against did collection only.
+   *
+   * Both shapes are accepted: a shop that stored one line of text keeps it.
+   */
+  deliveryAddress: string | DeliveryAddress | null;
   scheduledAt: string | null;
   createdAt: string;
   /**
@@ -129,6 +140,18 @@ export interface OrderingOrder {
    * the one that is actually coming.
    */
   shipments: OrderShipment[];
+}
+
+export interface DeliveryAddress {
+  name?: string;
+  company?: string;
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postcode?: string;
+  country?: string;
+  [key: string]: string | undefined;
 }
 
 export interface OrderShipment {
@@ -2105,7 +2128,7 @@ export class OrderingClient {
       tableId:         (raw['table_number'] as string | null) ?? (raw['table_id'] as string | null) ?? null,
       notes:           (raw['notes'] as string | null) ?? null,
       reference:       (raw['external_reference'] as string | null) ?? (raw['reference'] as string | null) ?? null,
-      deliveryAddress: (raw['delivery_address'] as string | null) ?? null,
+      deliveryAddress: (raw['delivery_address'] as string | DeliveryAddress | null) ?? null,
       scheduledAt:     (raw['scheduled_at'] as string | null) ?? null,
       createdAt:       (raw['created_at'] as string) ?? (raw['createdAt'] as string) ?? '',
       shipments:       ((raw['shipments'] as Array<Record<string, unknown>>) ?? [])
