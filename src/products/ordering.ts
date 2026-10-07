@@ -564,6 +564,15 @@ export interface HeaderSettings {
   /** A line in that band. */
   utilityMessage: string;
   /**
+   * normal | slow | fast | off — how fast the band turns over.
+   *
+   * The band carries one line per live offer as well as the merchant's own,
+   * and crossfades between them. Five seconds suits two short lines and is
+   * not enough for five long ones, so the merchant sets the pace. `off`
+   * leaves the strip still, with its arrows.
+   */
+  utilityRotate: string;
+  /**
    * The shop's one important button, in the bar.
    *
    * Blank label means no button. It points at whatever a menu entry can
@@ -951,6 +960,7 @@ function mapHeaderSettings(raw: unknown): HeaderSettings {
     showBorder:        bool('show_border', true),
     utilityBar:        (v['utility_bar'] as string) || 'off',
     utilityMessage:    (v['utility_message'] as string) ?? '',
+    utilityRotate:     (v['utility_rotate'] as string) || 'normal',
     actionLabel:       (v['action_label'] as string) ?? '',
     actionTarget:      (v['action_target'] as string) || 'catalog',
     actionValue:       (v['action_value'] as string) ?? '',
@@ -1013,6 +1023,7 @@ function unmapHeaderSettings(settings: Partial<HeaderSettings>): Record<string, 
   if (settings.showBorder !== undefined) out['show_border'] = settings.showBorder;
   if (settings.utilityBar !== undefined) out['utility_bar'] = settings.utilityBar;
   if (settings.utilityMessage !== undefined) out['utility_message'] = settings.utilityMessage;
+  if (settings.utilityRotate !== undefined) out['utility_rotate'] = settings.utilityRotate;
   if (settings.actionLabel !== undefined) out['action_label'] = settings.actionLabel;
   if (settings.actionTarget !== undefined) out['action_target'] = settings.actionTarget;
   if (settings.actionValue !== undefined) out['action_value'] = settings.actionValue;
