@@ -1864,6 +1864,8 @@ export class OrderingClient {
     sort?: 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'newest';
     minPrice?: number;
     maxPrice?: number;
+    /** Particular products, for a page that links to them by id. */
+    ids?: string[];
     limit?: number;
     offset?: number;
   } = {}): Promise<OrderingListResponse<OrderingProduct>> {
@@ -1875,6 +1877,7 @@ export class OrderingClient {
         // page/per_page, not limit/offset.
         path: '/v1/pos/catalog',
         query: {
+          ids: opts.ids?.length ? opts.ids.join(',') : undefined,
           category_id: opts.categoryId,
           search: opts.search,
           ...(opts.inStockOnly ? { in_stock_only: true } : {}),
