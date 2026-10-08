@@ -1572,6 +1572,13 @@ function _mapCustomPage(raw: Record<string, unknown>): CustomPage {
     seoDescription: (raw.seo_description as string | null) ?? null,
     showInNav:      (raw.show_in_nav as boolean) ?? false,
     showInFooter:   (raw.show_in_footer as boolean) ?? false,
+    sortOrder:      Number(raw.sort_order ?? 0),
+    publishAt:      (raw.publish_at as string | null) ?? null,
+    ogImageUrl:     (raw.og_image_url as string | null) ?? null,
+    formerSlugs:    ((raw.former_slugs as string[]) ?? []),
+    visibility:     ((raw.visibility as string) ?? 'draft') as CustomPage['visibility'],
+    wordCount:      Number(raw.word_count ?? 0),
+    readingMinutes: Number(raw.reading_minutes ?? 0),
     createdAt:      (raw.created_at as string) ?? '',
     updatedAt:      (raw.updated_at as string) ?? '',
   };
@@ -1590,6 +1597,18 @@ export interface CustomPage {
   showInFooter: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Where the merchant dragged it in the CMS list. */
+  sortOrder: number;
+  /** When it goes live. May be in the FUTURE — a scheduled page. */
+  publishAt: string | null;
+  /** What a link to this page looks like when it is shared. */
+  ogImageUrl: string | null;
+  /** Every address it has ever had. The shop redirects the old ones. */
+  formerSlugs: string[];
+  /** draft | scheduled | live. Derived by the server, never stored. */
+  visibility: 'draft' | 'scheduled' | 'live';
+  wordCount: number;
+  readingMinutes: number;
 }
 
 export interface CreateCustomPageParams {
@@ -3407,13 +3426,25 @@ export class OrderingClient {
     return { ...res, data: res.data.map(_mapCustomPage) };
   }
 
-  async getCustomPage(slug: string): Promise<CustomPage | null> {
+  /**
+   * One page, under any address it has ever had.
+   *
+   * `redirectTo` comes back when the address asked for is an old one. The
+   * shop should send a permanent redirect rather than serving the same
+   * page at two URLs — otherwise a rename splits the page's search ranking
+   * and the old address never retires.
+   */
+  async getCustomPage(
+    slug: string,
+  ): Promise<(CustomPage & { redirectTo?: string }) | null> {
     try {
       const raw = await this.call<Record<string, unknown>>(
         { method: 'GET', path: `/v1/pos/pages/${encodeURIComponent(slug)}` },
       );
       const body = (raw.page ?? raw) as Record<string, unknown>;
-      return _mapCustomPage(body);
+      const page = _mapCustomPage(body);
+      const redirectTo = raw.redirect_to as string | undefined;
+      return redirectTo ? { ...page, redirectTo } : page;
     } catch {
       return null;
     }
