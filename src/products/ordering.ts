@@ -889,6 +889,7 @@ function mapBlogComment(raw: Record<string, unknown>): BlogComment {
     body: text('body') ?? '',
     status: (text('status') ?? 'pending') as BlogComment['status'],
     isShopReply: Boolean(raw['is_shop_reply'] ?? raw['isShopReply']),
+    isPinned: Boolean(raw['is_pinned'] ?? raw['isPinned']),
     createdAt: text('created_at', 'createdAt'),
     depth: Number(raw['depth'] ?? 0),
   };
@@ -899,6 +900,9 @@ function mapBlogComment(raw: Record<string, unknown>): BlogComment {
   if ('held_reason' in raw) comment.heldReason = text('held_reason');
   if ('post_title' in raw) comment.postTitle = text('post_title');
   if ('moderated_at' in raw) comment.moderatedAt = text('moderated_at');
+  if ('report_count' in raw) comment.reportCount = Number(raw['report_count']);
+  if ('author_history' in raw) comment.authorHistory = text('author_history');
+  if ('author_is_new' in raw) comment.authorIsNew = Boolean(raw['author_is_new']);
   return comment;
 }
 
@@ -1484,6 +1488,13 @@ export interface BlogComment {
   status: 'pending' | 'approved' | 'spam' | 'rejected';
   /** The shop answering, rather than another customer. */
   isShopReply: boolean;
+  /** The shop saying "read this one". At most one per post; it leads. */
+  isPinned: boolean;
+  /** How many readers have raised it. Merchant-only. */
+  reportCount?: number;
+  /** "3 published · 1 marked spam", or "First comment here". Merchant-only. */
+  authorHistory?: string | null;
+  authorIsNew?: boolean;
   createdAt: string | null;
   /** 0 for a comment, 1 for a reply. The server flattens anything deeper. */
   depth: number;
@@ -1509,6 +1520,10 @@ export interface BlogCommentThread {
   allowGuests: boolean;
   /** True when a new comment waits to be read rather than appearing. */
   moderated: boolean;
+  /** Which order the thread came back in. */
+  sort: 'oldest' | 'newest';
+  /** False when the shop has turned reader reporting off; draw no control. */
+  canReport: boolean;
 }
 
 /** What happened to a comment somebody just left. */
@@ -3135,10 +3150,14 @@ export class OrderingClient {
    * carries the shop's policy with it because an empty list cannot tell a
    * page whether to draw the form or say nothing at all.
    */
-  async listBlogComments(slug: string): Promise<BlogCommentThread> {
+  async listBlogComments(
+    slug: string,
+    opts: { sort?: 'oldest' | 'newest' } = {},
+  ): Promise<BlogCommentThread> {
     const raw = await this.call<Record<string, unknown>>({
       method: 'GET',
       path: `/v1/pos/blog/posts/${encodeURIComponent(slug)}/comments`,
+      query: { sort: opts.sort },
     });
     return {
       comments: ((raw['comments'] as Record<string, unknown>[]) ?? [])
@@ -3148,7 +3167,24 @@ export class OrderingClient {
       closedReason: (raw['closed_reason'] as string | null) ?? null,
       allowGuests: Boolean(raw['allow_guests'] ?? raw['allowGuests']),
       moderated: Boolean(raw['moderated']),
+      sort: (raw['sort'] ?? 'oldest') as 'oldest' | 'newest',
+      canReport: Boolean(raw['can_report'] ?? raw['canReport']),
     };
+  }
+
+  /**
+   * A reader raises a comment the shop has not read.
+   *
+   * Always resolves, whatever happened — the endpoint answers 202 and
+   * nothing else on purpose. A reply that varied would let anybody probe
+   * which comments are near being pulled, and would tell somebody their
+   * own report worked, which is an invitation to send more.
+   */
+  async reportBlogComment(commentId: string): Promise<void> {
+    await this.call({
+      method: 'POST',
+      path: `/v1/pos/blog/comments/${encodeURIComponent(commentId)}/report`,
+    }).catch(() => undefined);
   }
 
   /**
@@ -3190,20 +3226,82 @@ export class OrderingClient {
   async listBlogCommentsForModeration(opts: {
     status?: BlogComment['status'];
     postId?: string;
+    search?: string;
     limit?: number;
-  } = {}): Promise<{ comments: BlogComment[]; total: number;
-                     counts: Record<string, number> }> {
+  } = {}): Promise<{
+    comments: BlogComment[];
+    total: number;
+    counts: Record<string, number>;
+    /** Only the posts that actually have comments, [id, title]. */
+    posts: Array<[string, string]>;
+  }> {
     const raw = await this.call<Record<string, unknown>>({
       method: 'GET',
       path: '/v1/pos/blog/comments',
-      query: { status: opts.status, post_id: opts.postId, limit: opts.limit },
+      query: {
+        status: opts.status, post_id: opts.postId,
+        search: opts.search, limit: opts.limit,
+      },
     });
     return {
       comments: ((raw['comments'] as Record<string, unknown>[]) ?? [])
         .map(mapBlogComment),
       total: Number(raw['total'] ?? 0),
       counts: (raw['counts'] as Record<string, number>) ?? {},
+      posts: (raw['posts'] as Array<[string, string]>) ?? [],
     };
+  }
+
+  /**
+   * Twenty at a time, which is the actual job.
+   *
+   * Reports what happened per id rather than failing the lot on one: a
+   * selection containing a comment somebody deleted a second ago should
+   * still move the other nineteen.
+   */
+  async bulkModerateBlogComments(
+    ids: string[],
+    action: 'approve' | 'reject' | 'spam' | 'unspam' | 'delete',
+  ): Promise<{ moved: number; missing: string[]; action: string }> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'POST',
+      path: '/v1/pos/blog/comments/bulk',
+      body: { ids, action },
+    });
+    return {
+      moved: Number(raw['moved'] ?? 0),
+      missing: (raw['missing'] as string[]) ?? [],
+      action: (raw['action'] as string) ?? action,
+    };
+  }
+
+  /** The shop saying "read this one". One per post; pinning a second
+   *  unpins the first. Only a published comment can be pinned. */
+  async pinBlogComment(commentId: string, pinned = true): Promise<BlogComment> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'POST',
+      path: `/v1/pos/blog/comments/${encodeURIComponent(commentId)}/pin`,
+      query: { pinned },
+    });
+    return mapBlogComment((raw['comment'] ?? raw) as Record<string, unknown>);
+  }
+
+  /**
+   * Always approve this person, never approve them, or neither.
+   *
+   * What a merchant wants after approving the same name four times.
+   * `forget` removes them from both lists — there is no third list of
+   * people who have been un-blocked.
+   */
+  async decideAboutCommenter(
+    email: string,
+    decision: 'trust' | 'block' | 'forget',
+  ): Promise<{ email: string; decision: string; trusted: string[]; blocked: string[] }> {
+    return this.call({
+      method: 'POST',
+      path: `/v1/pos/blog/commenters/${encodeURIComponent(email)}`,
+      body: { decision },
+    });
   }
 
   /** Approve it, take it down, call it spam, or send it back to the queue. */
