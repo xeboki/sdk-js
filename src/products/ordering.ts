@@ -840,6 +840,39 @@ export interface CheckoutSettings {
  *
  * A cast is not a mapping. The other resources here map; the blog was cast.
  */
+/**
+ * A booking, from what the endpoint actually sends.
+ *
+ * `_format_appointment` answers snake_case — `customer_id`, `service_name`,
+ * `scheduled_at` — and the list method casts it, so every camelCase field
+ * on a listed appointment is `undefined`. Reading one of those to decide
+ * whether somebody may cancel a booking would compare `undefined` with a
+ * customer id and refuse everybody, or, written the other way round, allow
+ * everybody.
+ */
+function mapAppointment(raw: Record<string, unknown>): OrderingAppointment {
+  const pick = (...keys: string[]): string | null => {
+    for (const key of keys) {
+      const value = raw[key];
+      if (typeof value === 'string' && value) return value;
+    }
+    return null;
+  };
+  return {
+    id: pick('id') ?? '',
+    status: pick('status') ?? 'pending',
+    serviceId: pick('service_id', 'serviceId') ?? '',
+    serviceName: pick('service_name', 'serviceName') ?? '',
+    customerId: pick('customer_id', 'customerId'),
+    customerName: pick('customer_name', 'customerName'),
+    staffId: pick('staff_id', 'staffId'),
+    staffName: pick('staff_name', 'staffName'),
+    notes: pick('notes'),
+    startTime: pick('scheduled_at', 'startTime', 'start_time') ?? '',
+    durationMinutes: Number(raw['duration_minutes'] ?? raw['durationMinutes'] ?? 0),
+  };
+}
+
 function mapBlogPost(raw: Record<string, unknown>): BlogPost {
   const text = (key: string): string => (raw[key] as string) ?? '';
   const orNull = (key: string): string | null =>
@@ -2307,7 +2340,8 @@ export class OrderingClient {
         },
       },
       'appointments',
-    );
+    ).then((res) => ({ ...res, data: res.data.map(
+      (row) => mapAppointment(row as unknown as Record<string, unknown>)) }));
   }
 
   // ── Group classes ───────────────────────────────────────────────────────────
@@ -2416,6 +2450,27 @@ export class OrderingClient {
       },
     });
     return ('appointment' in raw && raw.appointment) ? raw.appointment : raw as OrderingAppointment;
+  }
+
+  /**
+   * One booking, by id.
+   *
+   * Added because the storefront had no way to ask *whose* booking an id
+   * belongs to. Its cancel route checked that somebody was signed in and
+   * then passed the id straight through, so any shopper could cancel a
+   * stranger's appointment — the check the order page has always had.
+   *
+   * Mapped, not cast. The endpoint answers snake_case; `listAppointments`
+   * casts the same shape `as OrderingAppointment[]`, which is why
+   * `customerId` reads `undefined` on every row it returns. Same fault the
+   * blog had before it was given a mapper.
+   */
+  async getAppointment(id: string): Promise<OrderingAppointment> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'GET',
+      path: `/v1/pos/appointments/${encodeURIComponent(id)}`,
+    });
+    return mapAppointment((raw['appointment'] ?? raw) as Record<string, unknown>);
   }
 
   async updateAppointmentStatus(id: string, status: string): Promise<OrderingAppointment> {
