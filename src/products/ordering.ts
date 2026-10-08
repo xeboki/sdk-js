@@ -828,6 +828,64 @@ export interface CheckoutSettings {
   showSocialShare: boolean;
 }
 
+/**
+ * A blog post, in the shape the type promises.
+ *
+ * There was no mapper. `callList` casts the raw list `as T[]`, so `BlogPost`
+ * claimed camelCase and the API answered snake_case — **every one of those
+ * fields was undefined at runtime**. No post has ever shown its featured
+ * image or its author, and the date rendered as "Invalid Date" on every
+ * shop's blog index, because `publishedAt ?? createdAt` is undefined ??
+ * undefined.
+ *
+ * A cast is not a mapping. The other resources here map; the blog was cast.
+ */
+function mapBlogPost(raw: Record<string, unknown>): BlogPost {
+  const text = (key: string): string => (raw[key] as string) ?? '';
+  const orNull = (key: string): string | null =>
+    (raw[key] as string | null) ?? null;
+  const status = raw['status'] === 'published' ? 'published' : 'draft';
+  const seen = raw['visibility'];
+  return {
+    id:                raw['id'] as string,
+    slug:              text('slug'),
+    title:             text('title'),
+    excerpt:           orNull('excerpt'),
+    body:              text('body'),
+    featuredImageUrl:  orNull('featured_image_url'),
+    featuredImageAlt:  text('featured_image_alt'),
+    tags:              (raw['tags'] as string[]) ?? [],
+    status,
+    authorName:        orNull('author_name'),
+    seoTitle:          orNull('seo_title'),
+    seoDescription:    orNull('seo_description'),
+    publishedAt:       orNull('published_at'),
+    createdAt:         text('created_at'),
+    updatedAt:         text('updated_at'),
+    categoryId:        orNull('category_id'),
+    relatedProductIds: (raw['related_product_ids'] as string[]) ?? [],
+    // Served by the API, which is the only place that can compare a publish
+    // date with the clock. An older API that does not send it leaves a
+    // published post live, which is what it was before scheduling existed.
+    visibility: (seen === 'draft' || seen === 'scheduled' || seen === 'live')
+      ? seen
+      : (status === 'published' ? 'live' : 'draft'),
+    readingMinutes:    Number(raw['reading_minutes'] ?? 0) || 0,
+  };
+}
+
+function mapBlogCategory(raw: Record<string, unknown>): BlogCategory {
+  return {
+    id:          raw['id'] as string,
+    slug:        (raw['slug'] as string) ?? '',
+    name:        (raw['name'] as string) ?? '',
+    description: (raw['description'] as string) ?? '',
+    position:    Number(raw['position'] ?? 0) || 0,
+    postCount:   Number(raw['post_count'] ?? 0) || 0,
+  };
+}
+
+
 function mapCheckout(raw: unknown): CheckoutSettings {
   const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const bool = (key: string, fallback: boolean) =>
@@ -1321,9 +1379,35 @@ export interface BlogPost {
   authorName: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
+  /** When it goes live. May be in the FUTURE — a scheduled post. */
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** What the featured image shows. Shopify models alt on an article image. */
+  featuredImageAlt: string;
+  /** The curated grouping, as distinct from tags. */
+  categoryId: string | null;
+  /** Products this post is about. */
+  relatedProductIds: string[];
+  /**
+   * draft | scheduled | live.
+   *
+   * Derived by the server, never stored — `status` alone cannot tell a post
+   * that is live from one written for next Tuesday.
+   */
+  visibility: 'draft' | 'scheduled' | 'live';
+  /** 0 when there is no body; "do not show it" rather than "a minute". */
+  readingMinutes: number;
+}
+
+export interface BlogCategory {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  position: number;
+  /** Public posts only, so a category of drafts reads as empty. */
+  postCount: number;
 }
 
 export interface CreateBlogPostParams {
@@ -2880,30 +2964,43 @@ export class OrderingClient {
   async listBlogPosts(opts: {
     status?: 'draft' | 'published';
     tag?: string;
+    categoryId?: string;
     limit?: number;
     offset?: number;
   } = {}): Promise<OrderingListResponse<BlogPost>> {
-    return this.callList<BlogPost>(
+    const res = await this.callList<Record<string, unknown>>(
       {
         method: 'GET',
         path: '/v1/pos/blog/posts',
         query: {
           status: opts.status,
           tag: opts.tag,
+          category_id: opts.categoryId,
           limit: opts.limit ?? 20,
           offset: opts.offset ?? 0,
         },
       },
       'posts',
     );
+    return { ...res, data: res.data.map(mapBlogPost) };
+  }
+
+  /** The shop's blog categories, newest grouping first by the merchant's own
+   *  order rather than alphabetically. */
+  async listBlogCategories(): Promise<BlogCategory[]> {
+    const raw = await this.call<{ categories?: Record<string, unknown>[] }>(
+      { method: 'GET', path: '/v1/pos/blog/categories' },
+    );
+    return (raw.categories ?? []).map(mapBlogCategory);
   }
 
   async getBlogPost(slug: string): Promise<BlogPost | null> {
     try {
-      const raw = await this.call<{ post?: BlogPost } | BlogPost>(
+      const raw = await this.call<Record<string, unknown>>(
         { method: 'GET', path: `/v1/pos/blog/posts/${encodeURIComponent(slug)}` },
       );
-      return ('post' in raw && raw.post) ? raw.post : raw as BlogPost;
+      const post = (raw['post'] ?? raw) as Record<string, unknown>;
+      return post && post['id'] ? mapBlogPost(post) : null;
     } catch {
       return null;
     }

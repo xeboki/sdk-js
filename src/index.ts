@@ -154,6 +154,7 @@ export type {
   Announcement,
   OrderShipment,
   DeliveryAddress,
+  BlogCategory,
   CheckoutSettings,
   AnalyticsSettings,
   DeliveryEstimate,
