@@ -873,6 +873,35 @@ function mapAppointment(raw: Record<string, unknown>): OrderingAppointment {
   };
 }
 
+function mapBlogComment(raw: Record<string, unknown>): BlogComment {
+  const text = (...keys: string[]): string | null => {
+    for (const key of keys) {
+      const value = raw[key];
+      if (typeof value === 'string' && value) return value;
+    }
+    return null;
+  };
+  const comment: BlogComment = {
+    id: text('id') ?? '',
+    postId: text('post_id', 'postId'),
+    parentId: text('parent_id', 'parentId'),
+    authorName: text('author_name', 'authorName') ?? 'A customer',
+    body: text('body') ?? '',
+    status: (text('status') ?? 'pending') as BlogComment['status'],
+    isShopReply: Boolean(raw['is_shop_reply'] ?? raw['isShopReply']),
+    createdAt: text('created_at', 'createdAt'),
+    depth: Number(raw['depth'] ?? 0),
+  };
+  // Only carried when the server sent them, so a public comment does not
+  // acquire an `authorEmail: null` that looks like a missing address.
+  if ('author_email' in raw) comment.authorEmail = text('author_email');
+  if ('customer_id' in raw) comment.customerId = text('customer_id');
+  if ('held_reason' in raw) comment.heldReason = text('held_reason');
+  if ('post_title' in raw) comment.postTitle = text('post_title');
+  if ('moderated_at' in raw) comment.moderatedAt = text('moderated_at');
+  return comment;
+}
+
 function mapBlogPost(raw: Record<string, unknown>): BlogPost {
   const text = (key: string): string => (raw[key] as string) ?? '';
   const orNull = (key: string): string | null =>
@@ -1441,6 +1470,53 @@ export interface BlogCategory {
   position: number;
   /** Public posts only, so a category of drafts reads as empty. */
   postCount: number;
+}
+
+/** A reader's reply to a post. Approved ones only, on the public list. */
+export interface BlogComment {
+  id: string;
+  postId: string | null;
+  /** The comment this answers, or null. Threading is one level deep. */
+  parentId: string | null;
+  /** Never an email address, and never blank. */
+  authorName: string;
+  body: string;
+  status: 'pending' | 'approved' | 'spam' | 'rejected';
+  /** The shop answering, rather than another customer. */
+  isShopReply: boolean;
+  createdAt: string | null;
+  /** 0 for a comment, 1 for a reply. The server flattens anything deeper. */
+  depth: number;
+  // ── Merchant-only. Absent on the public list, deliberately: published
+  //    beside a comment, the addresses are a scrapeable address book.
+  authorEmail?: string | null;
+  customerId?: string | null;
+  /** Why a filter held it — "3 links", "blocked word: casino". */
+  heldReason?: string | null;
+  postTitle?: string | null;
+  moderatedAt?: string | null;
+}
+
+/** What a post's comment section needs before anybody types. */
+export interface BlogCommentThread {
+  comments: BlogComment[];
+  total: number;
+  /** False when the shop has comments off, or the post has closed. */
+  isOpen: boolean;
+  /** Why it closed, when it did. Null when comments are simply not a
+   *  feature here — "Comments are closed" with no reason reads as a fault. */
+  closedReason: string | null;
+  allowGuests: boolean;
+  /** True when a new comment waits to be read rather than appearing. */
+  moderated: boolean;
+}
+
+/** What happened to a comment somebody just left. */
+export interface BlogCommentOutcome {
+  comment: BlogComment;
+  status: BlogComment['status'];
+  /** Ready to show. A held comment is not an error. */
+  message: string;
 }
 
 export interface CreateBlogPostParams {
@@ -3050,6 +3126,115 @@ export class OrderingClient {
       { method: 'GET', path: '/v1/pos/blog/categories' },
     );
     return (raw.categories ?? []).map(mapBlogCategory);
+  }
+
+  /**
+   * What readers have said under a post, and whether they still can.
+   *
+   * Approved comments only — the server decides, not this. The thread
+   * carries the shop's policy with it because an empty list cannot tell a
+   * page whether to draw the form or say nothing at all.
+   */
+  async listBlogComments(slug: string): Promise<BlogCommentThread> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'GET',
+      path: `/v1/pos/blog/posts/${encodeURIComponent(slug)}/comments`,
+    });
+    return {
+      comments: ((raw['comments'] as Record<string, unknown>[]) ?? [])
+        .map(mapBlogComment),
+      total: Number(raw['total'] ?? 0),
+      isOpen: Boolean(raw['is_open'] ?? raw['isOpen']),
+      closedReason: (raw['closed_reason'] as string | null) ?? null,
+      allowGuests: Boolean(raw['allow_guests'] ?? raw['allowGuests']),
+      moderated: Boolean(raw['moderated']),
+    };
+  }
+
+  /**
+   * Leave one.
+   *
+   * Resolves whatever the shop's moderation decided — the outcome carries
+   * the state and the sentence to show. A held comment is **not** an
+   * error: somebody told "something went wrong" writes it again, and the
+   * shop receives it twice.
+   *
+   * `website` is a honeypot. Render it hidden, leave it empty, and send it.
+   */
+  async createBlogComment(slug: string, params: {
+    body: string;
+    authorName?: string;
+    authorEmail?: string;
+    parentId?: string;
+    website?: string;
+  }): Promise<BlogCommentOutcome> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'POST',
+      path: `/v1/pos/blog/posts/${encodeURIComponent(slug)}/comments`,
+      body: {
+        body: params.body,
+        ...(params.authorName !== undefined && { author_name: params.authorName }),
+        ...(params.authorEmail !== undefined && { author_email: params.authorEmail }),
+        ...(params.parentId !== undefined && { parent_id: params.parentId }),
+        ...(params.website !== undefined && { website: params.website }),
+      },
+    });
+    return {
+      comment: mapBlogComment((raw['comment'] ?? {}) as Record<string, unknown>),
+      status: (raw['status'] ?? 'pending') as BlogComment['status'],
+      message: (raw['message'] as string) ?? '',
+    };
+  }
+
+  /** The moderation queue. Merchant token only — these carry addresses. */
+  async listBlogCommentsForModeration(opts: {
+    status?: BlogComment['status'];
+    postId?: string;
+    limit?: number;
+  } = {}): Promise<{ comments: BlogComment[]; total: number;
+                     counts: Record<string, number> }> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'GET',
+      path: '/v1/pos/blog/comments',
+      query: { status: opts.status, post_id: opts.postId, limit: opts.limit },
+    });
+    return {
+      comments: ((raw['comments'] as Record<string, unknown>[]) ?? [])
+        .map(mapBlogComment),
+      total: Number(raw['total'] ?? 0),
+      counts: (raw['counts'] as Record<string, number>) ?? {},
+    };
+  }
+
+  /** Approve it, take it down, call it spam, or send it back to the queue. */
+  async moderateBlogComment(
+    commentId: string,
+    action: 'approve' | 'reject' | 'spam' | 'unspam',
+  ): Promise<BlogComment> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'PATCH',
+      path: `/v1/pos/blog/comments/${encodeURIComponent(commentId)}`,
+      body: { action },
+    });
+    return mapBlogComment((raw['comment'] ?? raw) as Record<string, unknown>);
+  }
+
+  /** The shop answers. Published on sight, and approves what it answers. */
+  async replyToBlogComment(commentId: string, body: string): Promise<BlogComment> {
+    const raw = await this.call<Record<string, unknown>>({
+      method: 'POST',
+      path: `/v1/pos/blog/comments/${encodeURIComponent(commentId)}/reply`,
+      body: { body },
+    });
+    return mapBlogComment((raw['comment'] ?? raw) as Record<string, unknown>);
+  }
+
+  /** Gone, with its replies. Distinct from `reject`, which keeps it. */
+  async deleteBlogComment(commentId: string): Promise<void> {
+    await this.call({
+      method: 'DELETE',
+      path: `/v1/pos/blog/comments/${encodeURIComponent(commentId)}`,
+    });
   }
 
   async getBlogPost(slug: string): Promise<BlogPost | null> {
