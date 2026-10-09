@@ -67,6 +67,17 @@ export interface OrderingProduct {
   variants: ProductVariant[];             // populated on getProduct(), empty on listProducts()
   modifierGroups: ModifierGroup[];
   tags: string[];
+
+  /**
+   * When the product was last edited, as the catalog API sends it. Null on an
+   * older API, and on a product nothing has touched since `updatedAt` was
+   * added.
+   *
+   * The sitemap needs this: it was emitting `lastModified: undefined` for
+   * every product while the catalog response had carried the date all along,
+   * so a crawler had no reason to re-read a page that had changed.
+   */
+  updatedAt: string | null;
 }
 
 export interface OrderingCustomer {
@@ -1866,6 +1877,7 @@ export class OrderingClient {
         : null,
       hasVariants:   (raw['has_variants'] as boolean | undefined) ?? false,
       variantOptions:(raw['variant_options'] as VariantOption[] | undefined) ?? [],
+      updatedAt:     (raw['updated_at'] as string | null) ?? null,
       variants: variants.map((v) => ({
         id:             v['id'] as string,
         label:          (v['label'] as string) ?? '',
